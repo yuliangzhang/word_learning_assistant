@@ -184,4 +184,4 @@ Playwright E2E：
 
 ## 说明
 
-Museum 卡样式结构参考了你提供的 `ljg-explain-words` 技能思路，并改为本项目的两步生成与本地存档路径约束。
+Museum 卡样式结构参考了 `https://github.com/lijigang/ljg-skill-explain-words/tree/master/skills/ljg-explain-words` 技能思路，并改为本项目的两步生成与本地存档路径约束。
