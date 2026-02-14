@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>单词卡查阅</title>
+  <style>
+    :root {
+      --bg: #f3f8f5;
+      --panel: #ffffff;
+      --ink: #18252e;
+      --muted: #5e7280;
+      --line: #cbdad0;
+      --accent: #0f6d53;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Avenir Next", "Helvetica Neue", Arial, sans-serif;
+      background: linear-gradient(145deg, #f4f9ef 0%, #eef7ff 100%);
+      color: var(--ink);
+      min-height: 100vh;
+      padding: 16px;
+    }
+    .wrap {
+      max-width: 1240px;
+      margin: 0 auto;
+      display: grid;
+      gap: 12px;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px;
+    }
+    .top-row {
+      display: grid;
+      grid-template-columns: 1fr auto auto auto;
+      gap: 8px;
+      align-items: center;
+    }
+    input[type="text"] {
+      width: 100%;
+      border: 1px solid #b9cdc0;
+      border-radius: 10px;
+      padding: 12px;
+      font-size: 17px;
+    }
+    button {
+      border: 0;
+      border-radius: 10px;
+      background: var(--accent);
+      color: #fff;
+      padding: 10px 14px;
+      font-size: 15px;
+      cursor: pointer;
+    }
+    button.secondary {
+      background: #fff;
+      color: #173c34;
+      border: 1px solid #b8d3c6;
+    }
+    .muted {
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .status {
+      padding-top: 6px;
+      font-size: 14px;
+      color: #28475a;
+    }
+    .frame-wrap {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+      overflow: hidden;
+      min-height: 70vh;
+    }
+    iframe {
+      border: 0;
+      width: 100%;
+      min-height: 70vh;
+      background: #fff;
+    }
+    @media (max-width: 980px) {
+      .top-row {
+        grid-template-columns: 1fr;
+      }
+      button { width: 100%; }
+      iframe { min-height: 68vh; }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="panel">
+      <h1 style="margin:0 0 8px;">单词卡查阅</h1>
+      <div class="muted">输入单词后可直接查看单词卡。若已缓存则直接打开，未缓存则自动生成。</div>
+      <div class="top-row" style="margin-top:10px;">
+        <input id="lookup-word" type="text" placeholder="输入英文单词，例如 accommodate" />
+        <button id="lookup-btn">查询单词卡</button>
+        <button id="regen-btn" class="secondary">重新生成</button>
+        <button id="add-btn" class="secondary">加入词库</button>
+      </div>
+      <div id="lookup-status" class="status">等待查询。</div>
+    </section>
+
+    <section class="panel">
+      <div class="frame-wrap">
+        <iframe id="card-frame" title="dictionary-card"></iframe>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const USER_ID = 2;
+    let currentWord = "";
+    let currentInVocab = false;
+
+    function normalizeWord(input) {
+      return String(input || "").trim().toLowerCase();
+    }
+
+    function setStatus(text) {
+      document.getElementById("lookup-status").textContent = text;
+    }
+
+    async function lookupCard(regenerate = false) {
+      const raw = document.getElementById("lookup-word").value;
+      const word = normalizeWord(raw);
+      if (!word) {
+        setStatus("请输入要查询的单词。");
+        return;
+      }
+      currentWord = word;
+      try {
+        const qs = new URLSearchParams({
+          user_id: String(USER_ID),
+          word,
+          regenerate: regenerate ? "1" : "0",
+        });
+        const res = await fetch(`/api/dictionary/card?${qs.toString()}`);
+        if (!res.ok) {
+          throw new Error(await res.text());
+        }
+        const data = await res.json();
+        document.getElementById("card-frame").src = data.url;
+        currentInVocab = Boolean(data.in_vocab);
+        const cacheText = data.cached ? "命中缓存" : "已新生成";
+        const vocabText = currentInVocab ? "已在词库中" : "未加入词库";
+        setStatus(`查询成功：${word}（${cacheText}，${vocabText}）`);
+      } catch (err) {
+        setStatus(`查询失败: ${err.message}`);
+      }
+    }
+
+    async function addToVocabulary() {
+      const word = currentWord || normalizeWord(document.getElementById("lookup-word").value);
+      if (!word) {
+        setStatus("请先查询一个单词。");
+        return;
+      }
+      try {
+        const res = await fetch("/api/dictionary/add", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: USER_ID, word }),
+        });
+        if (!res.ok) {
+          throw new Error(await res.text());
+        }
+        const data = await res.json();
+        currentInVocab = true;
+        if (data.card_url) {
+          document.getElementById("card-frame").src = data.card_url;
+        }
+        setStatus(data.added ? `已加入词库：${word}` : `该词已在词库中：${word}`);
+      } catch (err) {
+        setStatus(`加入词库失败: ${err.message}`);
+      }
+    }
+
+    document.getElementById("lookup-btn").addEventListener("click", () => lookupCard(false));
+    document.getElementById("regen-btn").addEventListener("click", () => lookupCard(true));
+    document.getElementById("add-btn").addEventListener("click", addToVocabulary);
+    document.getElementById("lookup-word").addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        lookupCard(false);
+      }
+    });
+  </script>
+</body>
+</html>

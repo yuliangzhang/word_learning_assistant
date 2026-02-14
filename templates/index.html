@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>单词管家 Word Assistance</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <main class="layout">
+    <section class="hero">
+      <h1>单词管家</h1>
+      <p>智能单词学习私人助理：上传、纠错、复习、练习、报告，一站完成。</p>
+      <div class="actions">
+        <button id="btn-today" class="big">今日任务</button>
+        <button id="btn-upload" class="big">上传单词</button>
+        <button id="btn-game" class="big">开始练习</button>
+        <button id="btn-dictionary" class="big">查单词卡</button>
+      </div>
+
+      <div class="voice-row">
+        <button id="voice-btn" class="voice" aria-label="按住说话">开始录音</button>
+        <label>
+          口音
+          <select id="voice-accent">
+            <option value="en-GB">英式 (en-GB)</option>
+            <option value="en-AU">澳式 (en-AU)</option>
+            <option value="en-US">美式 (en-US)</option>
+          </select>
+        </label>
+        <label>
+          Voice
+          <select id="voice-preset"></select>
+        </label>
+        <label class="check-inline"><input id="auto-send-stt" type="checkbox" checked />识别后自动发送</label>
+        <label class="check-inline"><input id="auto-tts" type="checkbox" />回复自动朗读</label>
+      </div>
+    </section>
+
+    <section class="panel chat-panel">
+      <h2>聊天窗口（LLM 驱动）</h2>
+      <div id="chat-log" class="chat-log"></div>
+      <div class="chat-input-row">
+        <input id="chat-input" placeholder="输入需求，例如：把 antena 改成 antenna" />
+        <button id="chat-send">发送</button>
+      </div>
+      <div class="tip">支持自然语言与命令：/learn /learn --words appraise,bolster /today /words /review /new 8 /mistakes /fix wrong correct /card antenna /game spelling /game match /game daily /report week</div>
+    </section>
+
+    <section class="panel import-panel">
+      <h2>上传与导入（含 OCR）</h2>
+      <textarea id="import-text" placeholder="粘贴生词文本（支持批量）"></textarea>
+      <div class="row">
+        <input id="import-tags" placeholder="标签，例如 Reading,Science" />
+        <button id="import-text-btn">文本预览</button>
+      </div>
+      <div class="row upload-row">
+        <input id="file-input" type="file" />
+        <button id="import-file-btn">文件预览</button>
+      </div>
+      <div id="preview-wrap" class="preview-wrap hidden">
+        <h3>导入预览清单</h3>
+        <div id="preview-list"></div>
+        <button id="commit-btn">确认入库</button>
+      </div>
+    </section>
+
+    <section class="panel stats-panel">
+      <h2>词库、修正与统计</h2>
+      <div class="word-toolbar">
+        <div class="status-filter-group">
+          <button class="filter-btn active" data-status="ALL">全部</button>
+          <button class="filter-btn" data-status="NEW">未学习</button>
+          <button class="filter-btn" data-status="IN_PROGRESS">学习中</button>
+          <button class="filter-btn" data-status="MASTERED">已掌握</button>
+        </div>
+        <div class="row page-size-row">
+          <label for="word-page-size">每页词数</label>
+          <select id="word-page-size">
+            <option value="10">10</option>
+            <option value="15" selected>15</option>
+            <option value="20">20</option>
+            <option value="30">30</option>
+          </select>
+          <button id="refresh-words">刷新词库</button>
+        </div>
+      </div>
+      <div id="word-summary" class="tip"></div>
+      <ul id="word-list" class="word-list"></ul>
+      <div class="word-pager">
+        <button id="word-prev">上一页</button>
+        <span id="word-page-info" class="tip">第 1 页</span>
+        <button id="word-next">下一页</button>
+      </div>
+      <h3>最近修正</h3>
+      <ul id="correction-list" class="word-list"></ul>
+      <button id="week-report">生成周报</button>
+      <div id="report-links"></div>
+    </section>
+
+    <section class="panel parent-panel">
+      <h2>家长配置面板</h2>
+      <div class="grid-2">
+        <label>每日新词上限 <input id="setting-new" type="number" min="1" max="40" /></label>
+        <label>每日复习上限 <input id="setting-review" type="number" min="1" max="200" /></label>
+        <label>
+          编排模式
+          <select id="setting-orchestration">
+            <option value="OPENCLAW_PREFERRED">OpenClaw优先（失败回退本地）</option>
+            <option value="LOCAL_ONLY">仅本地执行</option>
+            <option value="OPENCLAW_ONLY">仅OpenClaw（严格）</option>
+          </select>
+        </label>
+        <label>
+          OCR 强度
+          <select id="setting-ocr-strength">
+            <option value="FAST">快速（本地优先）</option>
+            <option value="BALANCED">平衡（推荐）</option>
+            <option value="ACCURATE">高精度（必要时云端兜底）</option>
+          </select>
+        </label>
+        <label>自动通过阈值 <input id="setting-auto-accept-threshold" type="number" min="0.5" max="0.99" step="0.01" /></label>
+        <label class="check-inline"><input id="setting-strict" type="checkbox" />严格模式</label>
+        <label class="check-inline"><input id="setting-llm" type="checkbox" />启用 LLM 路由</label>
+        <label class="check-inline"><input id="setting-auto-tts" type="checkbox" />自动语音播报</label>
+        <label>卡片质量模型 <input id="setting-card-quality-model" placeholder="例如 gpt-4.1-mini" /></label>
+        <label>卡片快速模型 <input id="setting-card-fast-model" placeholder="例如 gpt-4o-mini" /></label>
+        <label>
+          卡片策略
+          <select id="setting-card-strategy">
+            <option value="QUALITY_FIRST">质量优先（推荐）</option>
+            <option value="BALANCED">平衡</option>
+            <option value="FAST_FIRST">速度优先</option>
+          </select>
+        </label>
+      </div>
+      <div class="row">
+        <button id="save-settings">保存设置</button>
+        <button id="export-csv">导出 CSV</button>
+        <button id="export-xlsx">导出 XLSX</button>
+        <button id="create-backup">创建备份</button>
+        <button id="refresh-openclaw-status">OpenClaw 状态</button>
+      </div>
+      <div id="parent-links"></div>
+      <div id="openclaw-status" class="tip"></div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

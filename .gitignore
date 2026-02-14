@@ -1,0 +1,33 @@
+# OS / Editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Node / browser tests
+node_modules/
+playwright-report/
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+
+# Runtime and generated outputs
+artifacts/
+test-results/
+*.log
+*.pid
+word_assistance.db
+*.sqlite3
+
+# OpenClaw local workspace (runtime/generated profile workspace)
+openclaw_workspace/
