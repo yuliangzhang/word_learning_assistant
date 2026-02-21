@@ -53,11 +53,11 @@ def _render_learning_hub(*, user_id: int, words: list[dict], practice_url: str) 
     dataset = json.dumps(words, ensure_ascii=False)
     practice = practice_url
     return f"""<!DOCTYPE html>
-<html lang=\"zh-CN\">
+<html lang=\"en\">
 <head>
   <meta charset=\"UTF-8\" />
   <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
-  <title>今日学习工作台</title>
+  <title>Today's Learning Workspace</title>
   <style>
     :root {{
       --bg: #f4f6f8;
@@ -205,7 +205,7 @@ def _render_learning_hub(*, user_id: int, words: list[dict], practice_url: str) 
       border-bottom-right-radius: 12px;
       background: #fff;
     }}
-    @media (max-width: 980px) {{
+    @media (max-width: 760px) {{
       .layout {{
         grid-template-columns: 1fr;
         grid-template-rows: auto 1fr;
@@ -231,22 +231,22 @@ def _render_learning_hub(*, user_id: int, words: list[dict], practice_url: str) 
 <body>
   <main class=\"layout\">
     <aside class=\"sidebar\">
-      <h3 style=\"margin:4px 4px 10px;\">今日待学习单词</h3>
-      <div class=\"status-tip\">可直接在左侧调整每个单词状态</div>
+      <h3 style=\"margin:4px 4px 10px;\">Today's Focus Words</h3>
+      <div class=\"status-tip\">You can update each word status directly from the left panel.</div>
       <div id=\"word-list\" class=\"word-list\"></div>
     </aside>
     <section class=\"main\">
       <div class=\"toolbar\">
-        <a class=\"primary\" id=\"btn-spell\" href=\"{practice}#spell\" target=\"_blank\">拼写练习</a>
-        <a id=\"btn-match\" href=\"{practice}#match\" target=\"_blank\">释义匹配</a>
-        <button id=\"play-pron\">🔊 单词读音</button>
+        <a class=\"primary\" id=\"btn-spell\" href=\"{practice}#spell\" target=\"_blank\">Spelling Practice</a>
+        <a id=\"btn-match\" href=\"{practice}#match\" target=\"_blank\">Definition Match</a>
+        <button id=\"play-pron\">🔊 Pronounce Word</button>
         <select id=\"pron-accent\">
-          <option value=\"en-GB\">英式 (en-GB)</option>
-          <option value=\"en-AU\">澳式 (en-AU)</option>
-          <option value=\"en-US\">美式 (en-US)</option>
+          <option value=\"en-GB\">UK (en-GB)</option>
+          <option value=\"en-AU\">AU (en-AU)</option>
+          <option value=\"en-US\">US (en-US)</option>
         </select>
-        <button id=\"regen-card\">重生成当前卡片</button>
-        <span class=\"hint\">词卡按需生成并缓存；练习页按今日任务缓存。</span>
+        <button id=\"regen-card\">Regenerate Current Card</button>
+        <span class=\"hint\">Cards are generated on demand and cached; practice pages are cached by today's task.</span>
       </div>
       <div class=\"frame-wrap\">
         <iframe id=\"card-frame\" title=\"word-card\"></iframe>
@@ -275,10 +275,10 @@ def _render_learning_hub(*, user_id: int, words: list[dict], practice_url: str) 
 
     function statusLabel(status) {{
       const key = String(status || '').toUpperCase();
-      if (key === 'MASTERED') return '已掌握';
-      if (key === 'LEARNING' || key === 'REVIEWING') return '学习中';
-      if (key === 'SUSPENDED') return '暂停';
-      return '未学习';
+      if (key === 'MASTERED') return 'Mastered';
+      if (key === 'LEARNING' || key === 'REVIEWING') return 'In Progress';
+      if (key === 'SUSPENDED') return 'Paused';
+      return 'Not Started';
     }}
 
     function statusSelectValue(status) {{
@@ -314,7 +314,7 @@ def _render_learning_hub(*, user_id: int, words: list[dict], practice_url: str) 
         const frame = document.getElementById('card-frame');
         frame.src = data.url;
       }} catch (err) {{
-        alert('打开单词卡失败: ' + err.message);
+        alert('Failed to open card: ' + err.message);
       }}
     }}
 
@@ -338,9 +338,9 @@ def _render_learning_hub(*, user_id: int, words: list[dict], practice_url: str) 
         actions.className = 'word-actions';
         const statusSelect = document.createElement('select');
         statusSelect.innerHTML = `
-          <option value="NEW">未学习</option>
-          <option value="LEARNING">学习中</option>
-          <option value="MASTERED">已掌握</option>
+          <option value="NEW">Not Started</option>
+          <option value="LEARNING">In Progress</option>
+          <option value="MASTERED">Mastered</option>
         `;
         statusSelect.value = statusSelectValue(item.status);
         statusSelect.addEventListener('change', async () => {{
@@ -349,7 +349,7 @@ def _render_learning_hub(*, user_id: int, words: list[dict], practice_url: str) 
             item.status = updated.status;
             btn.querySelector('.status').textContent = statusLabel(updated.status);
           }} catch (err) {{
-            alert('更新状态失败: ' + err.message);
+            alert('Failed to update status: ' + err.message);
             statusSelect.value = statusSelectValue(item.status);
           }}
         }});
@@ -379,7 +379,7 @@ def _render_learning_hub(*, user_id: int, words: list[dict], practice_url: str) 
         const audio = new Audio(audioCache.get(key));
         await audio.play();
       }} catch (err) {{
-        alert('播放读音失败: ' + err.message);
+        alert('Audio playback failed: ' + err.message);
       }}
     }}
 

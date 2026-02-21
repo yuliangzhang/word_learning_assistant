@@ -1021,13 +1021,13 @@ class Database:
 
         if accuracy < 0.65:
             suggestion_new_limit = 4
-            suggestion_ratio = "复习 75% / 新词 25%"
+            suggestion_ratio = "Review 75% / New 25%"
         elif accuracy < 0.8:
             suggestion_new_limit = 6
-            suggestion_ratio = "复习 65% / 新词 35%"
+            suggestion_ratio = "Review 65% / New 35%"
         else:
             suggestion_new_limit = 8
-            suggestion_ratio = "复习 55% / 新词 45%"
+            suggestion_ratio = "Review 55% / New 45%"
 
         if practice_stats:
             sorted_by_risk = sorted(practice_stats, key=lambda item: (item["accuracy"], -item["practice_total"]))

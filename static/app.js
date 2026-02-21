@@ -46,7 +46,7 @@ function renderLinks(links = []) {
     a.href = link;
     a.target = "_blank";
     a.className = "link";
-    a.textContent = `打开: ${link}`;
+    a.textContent = `Open: ${link}`;
     log.appendChild(a);
   });
   log.scrollTop = log.scrollHeight;
@@ -66,7 +66,7 @@ async function speakText(text) {
     const audio = new Audio(data.audio_url);
     await audio.play();
   } catch (err) {
-    addMessage(`语音播报失败: ${err.message}`, "bot");
+    addMessage(`TTS failed: ${err.message}`, "bot");
   }
 }
 
@@ -77,24 +77,24 @@ async function sendChat(message) {
       method: "POST",
       body: JSON.stringify({ user_id: USER_ID, message }),
     });
-    addMessage(data.reply || "已处理");
+    addMessage(data.reply || "Done.");
     renderLinks(data.links || []);
     if (data.route_source === "openclaw") {
       const status = document.getElementById("openclaw-status");
       if (status) {
-        status.textContent = `聊天编排：OpenClaw（命令：${data.route_command || "自然语言"}）`;
+        status.textContent = `Chat routing: OpenClaw (command: ${data.route_command || "natural language"})`;
       }
     } else if (data.route_source === "openclaw_unavailable") {
       const status = document.getElementById("openclaw-status");
       if (status) {
-        status.textContent = "聊天编排：OpenClaw 当前不可用，已按设置处理。";
+        status.textContent = "Chat routing: OpenClaw unavailable, handled by configured fallback.";
       }
     }
     if (data.reply) {
       speakText(data.reply);
     }
   } catch (err) {
-    addMessage(`请求失败: ${err.message}`);
+    addMessage(`Request failed: ${err.message}`);
   }
 }
 
@@ -112,7 +112,7 @@ function renderPreview(items) {
       <span>${item.word_candidate}</span>
       <span>${item.suggested_correction}</span>
       <span>${item.confidence}</span>
-      <span>${item.needs_confirmation ? "需确认" : "自动"}</span>
+      <span>${item.needs_confirmation ? "Needs review" : "Auto"}</span>
     `;
     list.appendChild(row);
   });
@@ -122,7 +122,7 @@ function renderPreview(items) {
 async function importTextPreview() {
   const text = document.getElementById("import-text").value.trim();
   if (!text) {
-    addMessage("请先粘贴文本再预览。");
+    addMessage("Paste text first, then preview.");
     return;
   }
 
@@ -139,16 +139,16 @@ async function importTextPreview() {
     currentImportId = data.import_id;
     renderPreview(data.preview_items);
     const threshold = data.import_profile ? data.import_profile.auto_accept_threshold : 0.85;
-    addMessage(`已生成导入预览，共 ${data.preview_items.length} 条（自动阈值 ${threshold}）。`);
+    addMessage(`Text preview ready: ${data.preview_items.length} items (auto threshold ${threshold}).`);
   } catch (err) {
-    addMessage(`文本预览失败: ${err.message}`);
+    addMessage(`Text preview failed: ${err.message}`);
   }
 }
 
 async function importFilePreview() {
   const input = document.getElementById("file-input");
   if (!input.files || !input.files.length) {
-    addMessage("请先选择文件。", "bot");
+    addMessage("Please choose a file first.", "bot");
     return;
   }
 
@@ -163,16 +163,16 @@ async function importFilePreview() {
     currentImportId = data.import_id;
     renderPreview(data.preview_items);
     const mode = (data.import_profile && data.import_profile.ocr_strength) || "BALANCED";
-    const selectionMode = data.selection_mode === "smart" ? "智能筛选" : "标准筛选";
-    addMessage(`文件预览完成 (${data.source_type}, OCR=${mode}, ${selectionMode})，共 ${data.preview_items.length} 条。`);
+    const selectionMode = data.selection_mode === "smart" ? "Smart selection" : "Standard selection";
+    addMessage(`File preview ready (${data.source_type}, OCR=${mode}, ${selectionMode}), ${data.preview_items.length} items.`);
   } catch (err) {
-    addMessage(`文件预览失败: ${err.message}`);
+    addMessage(`File preview failed: ${err.message}`);
   }
 }
 
 async function commitImport() {
   if (!currentImportId) {
-    addMessage("还没有可提交的导入批次。", "bot");
+    addMessage("No import batch to commit yet.", "bot");
     return;
   }
 
@@ -184,18 +184,18 @@ async function commitImport() {
       method: "POST",
       body: JSON.stringify({ import_id: currentImportId, accepted_item_ids: checked }),
     });
-    addMessage(`导入完成，入库 ${data.imported_words} 个单词。`);
+    addMessage(`Import done. Added ${data.imported_words} words.`);
     currentImportId = null;
     document.getElementById("preview-wrap").classList.add("hidden");
     refreshWords();
     refreshCorrections();
   } catch (err) {
-    addMessage(`提交失败: ${err.message}`);
+    addMessage(`Commit failed: ${err.message}`);
   }
 }
 
 async function correctWord(wordId, lemma) {
-  const input = prompt(`将 ${lemma} 修正为：`, lemma);
+  const input = prompt(`Fix "${lemma}" to:`, lemma);
   if (!input || input.trim().toLowerCase() === lemma.toLowerCase()) {
     return;
   }
@@ -211,44 +211,44 @@ async function correctWord(wordId, lemma) {
         corrected_by_role: "CHILD",
       }),
     });
-    addMessage(`修正成功：${lemma} -> ${data.word.lemma}`);
+    addMessage(`Updated: ${lemma} -> ${data.word.lemma}`);
     refreshWords();
     refreshCorrections();
   } catch (err) {
-    addMessage(`修正失败: ${err.message}`);
+    addMessage(`Correction failed: ${err.message}`);
   }
 }
 
 async function deleteWord(wordId, lemma) {
-  const ok = confirm(`确认删除单词 "${lemma}" 吗？此操作会删除相关学习记录。`);
+  const ok = confirm(`Delete "${lemma}"? This also removes related practice records.`);
   if (!ok) return;
 
   try {
     await requestJSON(`/api/words/${wordId}?user_id=${USER_ID}&deleted_by_role=CHILD`, {
       method: "DELETE",
     });
-    addMessage(`已删除：${lemma}`);
+    addMessage(`Deleted: ${lemma}`);
     refreshWords();
     refreshCorrections();
   } catch (err) {
-    addMessage(`删除失败: ${err.message}`);
+    addMessage(`Delete failed: ${err.message}`);
   }
 }
 
 function statusText(status) {
   const key = String(status || "").toUpperCase();
-  if (key === "MASTERED") return "已掌握";
-  if (key === "LEARNING" || key === "REVIEWING") return "学习中";
-  if (key === "SUSPENDED") return "暂停";
-  return "未学习";
+  if (key === "MASTERED") return "Mastered";
+  if (key === "LEARNING" || key === "REVIEWING") return "In Progress";
+  if (key === "SUSPENDED") return "Paused";
+  return "Not Started";
 }
 
 function statusFilterText(filter) {
   const key = String(filter || "ALL").toUpperCase();
-  if (key === "MASTERED") return "已掌握";
-  if (key === "IN_PROGRESS" || key === "LEARNING") return "学习中";
-  if (key === "NEW") return "未学习";
-  return "全部";
+  if (key === "MASTERED") return "Mastered";
+  if (key === "IN_PROGRESS" || key === "LEARNING") return "In Progress";
+  if (key === "NEW") return "Not Started";
+  return "All";
 }
 
 async function updateWordStatus(wordId, status) {
@@ -267,7 +267,7 @@ function renderWordPager() {
   const prev = document.getElementById("word-prev");
   const next = document.getElementById("word-next");
   if (info) {
-    info.textContent = `第 ${wordListState.page} / ${wordListState.totalPages} 页`;
+    info.textContent = `Page ${wordListState.page} / ${wordListState.totalPages}`;
   }
   if (prev) prev.disabled = wordListState.page <= 1;
   if (next) next.disabled = wordListState.page >= wordListState.totalPages;
@@ -290,7 +290,7 @@ async function refreshWords() {
     wordListState.totalPages = Number(data.total_pages || 1);
     wordListState.page = Number(data.page || 1);
     if (summary) {
-      summary.textContent = `当前词库：${wordListState.total} 个（筛选：${statusFilterText(wordListState.status)}）`;
+      summary.textContent = `Vocabulary: ${wordListState.total} words (filter: ${statusFilterText(wordListState.status)})`;
     }
     data.items.forEach((word) => {
       const li = document.createElement("li");
@@ -298,19 +298,19 @@ async function refreshWords() {
       const next = word.next_review_at ? new Date(word.next_review_at).toLocaleString() : "-";
       const meta = document.createElement("div");
       meta.className = "meta";
-      meta.textContent = `${word.lemma} | 状态: ${statusText(word.status)} | 下次复习: ${next}`;
+      meta.textContent = `${word.lemma} | Status: ${statusText(word.status)} | Next review: ${next}`;
 
       const actionWrap = document.createElement("div");
       actionWrap.className = "word-actions";
       const select = document.createElement("select");
       select.className = "action-select";
       select.innerHTML = `
-        <option value="">操作</option>
-        <option value="correct">纠正</option>
-        <option value="delete">删除</option>
-        <option value="status:NEW">设为未学习</option>
-        <option value="status:LEARNING">设为学习中</option>
-        <option value="status:MASTERED">设为已掌握</option>
+        <option value="">Action</option>
+        <option value="correct">Correct</option>
+        <option value="delete">Delete</option>
+        <option value="status:NEW">Set Not Started</option>
+        <option value="status:LEARNING">Set In Progress</option>
+        <option value="status:MASTERED">Set Mastered</option>
       `;
       select.addEventListener("change", async () => {
         const action = select.value;
@@ -328,12 +328,12 @@ async function refreshWords() {
           if (action.startsWith("status:")) {
             const nextStatus = action.split(":")[1] || "NEW";
             const updated = await updateWordStatus(word.id, nextStatus);
-            addMessage(`状态已更新：${word.lemma} -> ${statusText(updated.status)}`);
+            addMessage(`Status updated: ${word.lemma} -> ${statusText(updated.status)}`);
             refreshWords();
             return;
           }
         } catch (err) {
-          addMessage(`操作失败: ${err.message}`);
+          addMessage(`Action failed: ${err.message}`);
         }
       });
       actionWrap.appendChild(select);
@@ -344,7 +344,7 @@ async function refreshWords() {
     });
     renderWordPager();
   } catch (err) {
-    addMessage(`刷新词库失败: ${err.message}`);
+    addMessage(`Failed to refresh vocabulary: ${err.message}`);
   }
 }
 
@@ -359,7 +359,7 @@ async function refreshCorrections() {
       list.appendChild(li);
     });
   } catch (err) {
-    addMessage(`读取修正记录失败: ${err.message}`);
+    addMessage(`Failed to load correction history: ${err.message}`);
   }
 }
 
@@ -372,19 +372,19 @@ async function generateWeekReport() {
     htmlLink.className = "link";
     htmlLink.href = data.html_url;
     htmlLink.target = "_blank";
-    htmlLink.textContent = "打开周报 HTML";
+    htmlLink.textContent = "Open Weekly Report (HTML)";
     box.appendChild(htmlLink);
 
     const csvLink = document.createElement("a");
     csvLink.className = "link";
     csvLink.href = data.csv_url;
     csvLink.target = "_blank";
-    csvLink.textContent = "下载周报 CSV";
+    csvLink.textContent = "Download Weekly Report (CSV)";
     box.appendChild(csvLink);
 
-    addMessage(`周报生成成功，正确率 ${(data.report.accuracy * 100).toFixed(0)}%。`);
+    addMessage(`Weekly report generated. Accuracy ${(data.report.accuracy * 100).toFixed(0)}%.`);
   } catch (err) {
-    addMessage(`周报生成失败: ${err.message}`);
+    addMessage(`Weekly report failed: ${err.message}`);
   }
 }
 
@@ -394,7 +394,7 @@ async function loadVoices() {
     window.voiceOptions = data.voices || {};
     updateVoiceOptions();
   } catch (err) {
-    addMessage(`读取语音配置失败: ${err.message}`);
+    addMessage(`Failed to load voice options: ${err.message}`);
   }
 }
 
@@ -413,7 +413,7 @@ function updateVoiceOptions() {
 
 async function startRecording() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    addMessage("当前浏览器不支持录音。", "bot");
+    addMessage("This browser does not support audio recording.", "bot");
     return;
   }
 
@@ -432,10 +432,10 @@ async function startRecording() {
       await submitStt(blob);
     };
     mediaRecorder.start();
-    document.getElementById("voice-btn").textContent = "停止录音";
-    addMessage("录音中...再次点击可结束。", "bot");
+    document.getElementById("voice-btn").textContent = "Stop Recording";
+    addMessage("Recording... tap again to stop.", "bot");
   } catch (err) {
-    addMessage(`开启录音失败: ${err.message}`, "bot");
+    addMessage(`Failed to start recording: ${err.message}`, "bot");
   }
 }
 
@@ -443,7 +443,7 @@ function stopRecording() {
   if (!mediaRecorder) return;
   mediaRecorder.stop();
   mediaRecorder = null;
-  document.getElementById("voice-btn").textContent = "开始录音";
+  document.getElementById("voice-btn").textContent = "Start Recording";
 }
 
 async function submitStt(blob) {
@@ -451,14 +451,14 @@ async function submitStt(blob) {
   form.append("file", blob, "record.webm");
   try {
     const data = await requestJSON("/api/speech/stt", { method: "POST", body: form });
-    addMessage(`语音识别: ${data.text}`, "user");
+    addMessage(`STT: ${data.text}`, "user");
     if (document.getElementById("auto-send-stt").checked) {
       sendChat(data.text);
     } else {
       document.getElementById("chat-input").value = data.text;
     }
   } catch (err) {
-    addMessage(`语音识别失败: ${err.message}`, "bot");
+    addMessage(`STT failed: ${err.message}`, "bot");
   }
 }
 
@@ -486,7 +486,7 @@ async function loadParentSettings() {
       document.getElementById("voice-preset").value = s.tts_voice;
     }
   } catch (err) {
-    addMessage(`读取家长设置失败: ${err.message}`);
+    addMessage(`Failed to load parent settings: ${err.message}`);
   }
 }
 
@@ -517,9 +517,9 @@ async function saveParentSettings() {
     });
     document.getElementById("setting-auto-accept-threshold").value = payload.correction_auto_accept_threshold.toFixed(2);
     document.getElementById("auto-tts").checked = payload.auto_tts;
-    addMessage("家长设置已保存。", "bot");
+    addMessage("Parent settings saved.", "bot");
   } catch (err) {
-    addMessage(`保存家长设置失败: ${err.message}`, "bot");
+    addMessage(`Failed to save parent settings: ${err.message}`, "bot");
   }
 }
 
@@ -531,10 +531,10 @@ async function exportWords(fmt) {
     link.href = data.url;
     link.target = "_blank";
     link.className = "link";
-    link.textContent = `下载词库 ${fmt.toUpperCase()} (${data.count} 条)`;
+    link.textContent = `Download ${fmt.toUpperCase()} (${data.count} words)`;
     box.prepend(link);
   } catch (err) {
-    addMessage(`导出失败: ${err.message}`, "bot");
+    addMessage(`Export failed: ${err.message}`, "bot");
   }
 }
 
@@ -546,11 +546,11 @@ async function createBackup() {
     link.href = data.backup_url;
     link.target = "_blank";
     link.className = "link";
-    link.textContent = "下载备份包";
+    link.textContent = "Download Backup";
     box.prepend(link);
-    addMessage("备份已创建。", "bot");
+    addMessage("Backup created.", "bot");
   } catch (err) {
-    addMessage(`创建备份失败: ${err.message}`, "bot");
+    addMessage(`Backup failed: ${err.message}`, "bot");
   }
 }
 
@@ -561,18 +561,18 @@ async function loadOpenClawStatus() {
   try {
     const data = await requestJSON("/api/openclaw/status");
     const modeText = {
-      OPENCLAW_PREFERRED: "OpenClaw优先",
-      LOCAL_ONLY: "仅本地",
-      OPENCLAW_ONLY: "仅OpenClaw",
-    }[data.mode] || data.mode || "未设置";
+      OPENCLAW_PREFERRED: "OpenClaw preferred",
+      LOCAL_ONLY: "Local only",
+      OPENCLAW_ONLY: "OpenClaw only",
+    }[data.mode] || data.mode || "unset";
     if (data.available && data.gateway === "up") {
-      box.textContent = `OpenClaw: 在线（mode=${modeText}, profile=${data.profile || "word-assistant"}）`;
+      box.textContent = `OpenClaw: online (mode=${modeText}, profile=${data.profile || "word-assistant"})`;
     } else {
-      const reason = data.reason || "不可用";
-      box.textContent = `OpenClaw: 不可用（mode=${modeText}，原因: ${reason}）`;
+      const reason = data.reason || "unavailable";
+      box.textContent = `OpenClaw: unavailable (mode=${modeText}, reason=${reason})`;
     }
   } catch (err) {
-    box.textContent = `OpenClaw 状态读取失败: ${err.message}`;
+    box.textContent = `OpenClaw status failed: ${err.message}`;
   }
 }
 
@@ -592,11 +592,11 @@ function bindEvents() {
     }
   });
 
-  document.getElementById("btn-today").addEventListener("click", () => sendChat("帮我看今天任务"));
+  document.getElementById("btn-today").addEventListener("click", () => sendChat("Show me today's plan"));
   document.getElementById("btn-upload").addEventListener("click", () => {
     document.querySelector(".import-panel").scrollIntoView({ behavior: "smooth" });
   });
-  document.getElementById("btn-game").addEventListener("click", () => sendChat("开始拼写练习"));
+  document.getElementById("btn-game").addEventListener("click", () => sendChat("Start spelling practice"));
   const dictionaryBtn = document.getElementById("btn-dictionary");
   if (dictionaryBtn) {
     dictionaryBtn.addEventListener("click", () => {
@@ -667,4 +667,4 @@ loadParentSettings();
 refreshWords();
 refreshCorrections();
 loadOpenClawStatus();
-addMessage("欢迎使用单词管家。你可以直接说需求，我会理解并执行。", "bot");
+addMessage("Welcome to Word Learning Assistant. Tell me what to do and I will execute it.", "bot");

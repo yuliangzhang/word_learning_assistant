@@ -65,36 +65,74 @@ pip install -r requirements.txt
 ./scripts/dev_status.sh
 ```
 
-## Linux 一键部署（systemd）
+## Ubuntu 一键部署（systemd）
 
-适用于 Ubuntu/Debian 服务器，脚本会自动完成：拉取代码、创建虚拟环境、安装依赖、注册并启动 `systemd` 服务。
+推荐系统：`Ubuntu 22.04/24.04`。  
+脚本会自动完成：安装依赖、拉取代码、创建 `.venv`、安装 Python 依赖、生成 systemd 服务并启动。
+
+### 1. 首次部署（One Command）
 
 ```bash
 git clone https://github.com/yuliangzhang/word_learning_assistant.git
 cd word_learning_assistant
-chmod +x scripts/deploy_linux.sh scripts/update_linux.sh
-./scripts/deploy_linux.sh
+chmod +x scripts/deploy_linux.sh scripts/deploy_ubuntu.sh scripts/update_linux.sh
+sudo APP_DIR=/opt/word_learning_assistant BRANCH=main ./scripts/deploy_ubuntu.sh
 ```
 
-首次部署会自动生成 `.env`（来自 `.env.example`）。你只需要编辑一次 `.env`，后续重启/更新都不需要再 `export`：
+首次部署会自动创建：
+- 应用目录：`/opt/word_learning_assistant`
+- 环境文件：`/opt/word_learning_assistant/.env`
+- 服务名：`word-learning-assistant`
+
+### 2. 配置 API Key（只做一次）
 
 ```bash
-vim /opt/word_learning_assistant/.env
+sudo vim /opt/word_learning_assistant/.env
 ```
 
-常用运维命令：
+建议至少配置：
+- `OPENAI_API_KEY=...`
+- `WORD_ASSISTANCE_CARD_LLM_QUALITY_MODEL=...`
+- `WORD_ASSISTANCE_CARD_LLM_FAST_MODEL=...`
+
+保存后重启服务：
+
+```bash
+sudo systemctl restart word-learning-assistant
+```
+
+### 3. 服务管理与排错
 
 ```bash
 sudo systemctl status word-learning-assistant
-sudo systemctl restart word-learning-assistant
 sudo journalctl -u word-learning-assistant -f
+curl -fsS http://127.0.0.1:8000/health
 ```
 
-一键更新（拉取最新代码 + 安装依赖 + 重启服务）：
+### 4. 一键更新（后续升级）
 
 ```bash
 cd /opt/word_learning_assistant
-./scripts/update_linux.sh
+sudo ./scripts/update_linux.sh
+```
+
+### 5. 可选自定义参数
+
+部署时可覆盖默认值：
+
+```bash
+sudo APP_DIR=/opt/word_learning_assistant \
+  APP_PORT=8000 \
+  SERVICE_NAME=word-learning-assistant \
+  APP_USER=$USER \
+  BRANCH=main \
+  ./scripts/deploy_ubuntu.sh
+```
+
+如果服务器有多版本 Python，可显式指定：
+
+```bash
+sudo PYTHON_BIN=python3 PYTHON_PACKAGE=python3 ./scripts/deploy_ubuntu.sh
 ```
 
 ## 仅启动业务服务（不启 OpenClaw）

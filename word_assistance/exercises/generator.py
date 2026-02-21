@@ -88,7 +88,7 @@ def _question_payload(session_type: str, words: list[dict]) -> list[dict]:
     if normalized_type == "MATCH":
         for idx, word in enumerate(words):
             answer = str(word["lemma"]).lower()
-            definition_text = _compose_definition(word, lemma=answer, default="该词的常用释义（词典待补全）")
+            definition_text = _compose_definition(word, lemma=answer, default="Common meaning is pending lexicon enrichment.")
             payload.append(
                 {
                     "uid": str(idx + 1),
@@ -102,7 +102,7 @@ def _question_payload(session_type: str, words: list[dict]) -> list[dict]:
     elif normalized_type == "SPELL":
         for word in words:
             answer = str(word["lemma"]).lower()
-            clue = _compose_definition(word, lemma=answer, default="点击🔊播放读音后，在输入框拼写。")
+            clue = _compose_definition(word, lemma=answer, default="Tap 🔊 for pronunciation, then spell the word.")
             payload.append(
                 {
                     "uid": str(word.get("id") or answer),
@@ -138,7 +138,7 @@ def _question_payload(session_type: str, words: list[dict]) -> list[dict]:
 def _render_exercise_page(session_type: str, questions: list[dict]) -> str:
     dataset = json.dumps(questions, ensure_ascii=False)
     return f"""<!DOCTYPE html>
-<html lang=\"zh-CN\">
+<html lang=\"en\">
 <head>
   <meta charset=\"UTF-8\" />
   <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
@@ -155,10 +155,10 @@ def _render_exercise_page(session_type: str, questions: list[dict]) -> str:
 </head>
 <body>
   <div class=\"wrap\">
-    <h1>{session_type} 练习</h1>
-    <p>完成后点击提交，系统会统计得分和错题。</p>
+    <h1>{session_type} Practice</h1>
+    <p>Submit when finished. The system will compute score and mistakes.</p>
     <div id=\"list\"></div>
-    <button id=\"submit\">提交练习</button>
+    <button id=\"submit\">Submit</button>
     <div id=\"result\" class=\"result\"></div>
   </div>
   <script>
@@ -168,7 +168,7 @@ def _render_exercise_page(session_type: str, questions: list[dict]) -> str:
     questions.forEach((q, idx) => {{
       const card = document.createElement('div');
       card.className = 'card';
-      card.innerHTML = `<div><b>#${{idx + 1}}</b> ${{q.prompt}}</div><input data-idx="${{idx}}" placeholder="请输入答案" />`;
+      card.innerHTML = `<div><b>#${{idx + 1}}</b> ${{q.prompt}}</div><input data-idx="${{idx}}" placeholder="Type your answer" />`;
       list.appendChild(card);
     }});
 
@@ -186,9 +186,9 @@ def _render_exercise_page(session_type: str, questions: list[dict]) -> str:
         }}
       }});
       const score = Math.round((correct / questions.length) * 100);
-      const summary = `得分: ${{score}} 分 (${{correct}}/${{questions.length}})`;
+      const summary = `Score: ${{score}} (${{correct}}/${{questions.length}})`;
       const resultEl = document.getElementById('result');
-      resultEl.textContent = mistakes.length ? summary + `，错题: ${{mistakes.length}}` : summary + '，全对!';
+      resultEl.textContent = mistakes.length ? summary + `, mistakes: ${{mistakes.length}}` : summary + ', perfect!';
     }});
   </script>
 </body>
@@ -208,7 +208,7 @@ def _render_daily_combo_page(*, user_id: int, words: list[dict], spell_questions
         ensure_ascii=False,
     )
     return f"""<!DOCTYPE html>
-<html lang=\"zh-CN\">
+<html lang=\"en\">
 <head>
   <meta charset=\"UTF-8\" />
   <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
@@ -225,16 +225,60 @@ def _render_daily_combo_page(*, user_id: int, words: list[dict], spell_questions
     .top-controls {{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px; }}
     .top-controls select {{ padding:8px 10px; border:1px solid #bcd7ca; border-radius:8px; background:#fff; }}
     .hint {{ color:var(--muted); font-size:14px; }}
+    .hint.small {{ font-size:12px; }}
     .card {{ background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:10px; }}
     input {{ width:100%; padding:10px; font-size:16px; border:1px solid #bcd7ca; border-radius:8px; margin-top:8px; }}
     button.primary {{ background:var(--accent); color:#fff; border:0; border-radius:8px; padding:10px 16px; font-size:16px; cursor:pointer; }}
     button.secondary {{ background:#fff; color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:8px 12px; font-size:14px; cursor:pointer; }}
     .actions {{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:10px; }}
     .result {{ margin-top:14px; font-weight:700; white-space:pre-line; }}
+    .result.good {{ color:#0f766e; }}
+    .result.bad {{ color:#9f1239; }}
     .spell-head {{ display:flex; justify-content:space-between; gap:10px; align-items:center; flex-wrap:wrap; }}
     .audio-btn {{ border:1px solid #9bc8b8; background:#ecfff8; color:#0d5c46; border-radius:999px; padding:7px 11px; cursor:pointer; font-weight:700; }}
     .audio-btn:disabled {{ opacity:.6; cursor:not-allowed; }}
     .clue {{ color:#4b606b; font-size:14px; margin-top:8px; }}
+    .spell-progress {{ font-size:13px; color:var(--muted); margin-bottom:8px; }}
+    .spell-actions {{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }}
+    .big-submit {{
+      width: 100%;
+      margin-top: 10px;
+      padding: 12px 16px;
+      border-radius: 10px;
+      border: 0;
+      background: #0f766e;
+      color: #fff;
+      font-size: 17px;
+      font-weight: 700;
+      cursor: pointer;
+    }}
+    .feedback {{ margin-top: 10px; font-weight: 700; min-height: 24px; }}
+    .feedback.good {{ color:#0f766e; }}
+    .feedback.bad {{ color:#9f1239; }}
+    .ink-wrap {{
+      margin-top: 10px;
+      border: 1px solid #d3e8dd;
+      border-radius: 10px;
+      padding: 10px;
+      background: #fcfffd;
+    }}
+    .ink-tools {{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px; }}
+    canvas#ink-canvas {{
+      width: 100%;
+      height: 190px;
+      border: 1px dashed #9fbcb0;
+      border-radius: 8px;
+      background: #fff;
+      touch-action: none;
+      cursor: crosshair;
+    }}
+    .summary-card {{
+      background: #fff;
+      border: 1px solid #cde4d9;
+      border-radius: 12px;
+      padding: 14px;
+    }}
+    .summary-card h3 {{ margin: 0 0 10px; }}
     .match-shell {{
       position: relative;
       display: grid;
@@ -307,10 +351,11 @@ def _render_daily_combo_page(*, user_id: int, words: list[dict], spell_questions
       flex-wrap:wrap;
       margin-top:12px;
     }}
-    .hidden {{ display:none; }}
+    .hidden {{ display:none !important; }}
     @media (max-width: 860px) {{
       .match-shell {{ grid-template-columns: 1fr; min-height: auto; }}
       .match-col {{ min-height: auto; }}
+      canvas#ink-canvas {{ height: 220px; }}
     }}
   </style>
 </head>
@@ -318,33 +363,33 @@ def _render_daily_combo_page(*, user_id: int, words: list[dict], spell_questions
   <div class=\"wrap\">
     <div class=\"header\">
       <div>
-        <h1 style=\"margin:0;\">今日练习（拼写 + 释义匹配）</h1>
-        <div class=\"hint\">系统按今日任务生成并缓存，默认优先使用缓存结果。</div>
+        <h1 style=\"margin:0;\">Today's Practice (Spelling + Definition Match)</h1>
+        <div class=\"hint\">Generated from today's task and cached for reuse.</div>
       </div>
-      <div class=\"hint\">单词数：{len(words)}</div>
+      <div class=\"hint\">Word count: {len(words)}</div>
     </div>
     <div class=\"tabs\">
-      <button class=\"tab-btn\" data-mode=\"spell\">拼写练习</button>
-      <button class=\"tab-btn\" data-mode=\"match\">释义匹配</button>
+      <button class=\"tab-btn\" data-mode=\"spell\">Spelling</button>
+      <button class=\"tab-btn\" data-mode=\"match\">Definition Match</button>
     </div>
     <div class=\"top-controls\">
-      <label class=\"hint\">发音口音：</label>
+      <label class=\"hint\">Pronunciation accent:</label>
       <select id=\"accent\">
-        <option value=\"en-GB\">英式 (en-GB)</option>
-        <option value=\"en-AU\">澳式 (en-AU)</option>
-        <option value=\"en-US\">美式 (en-US)</option>
+        <option value=\"en-GB\">UK (en-GB)</option>
+        <option value=\"en-AU\">AU (en-AU)</option>
+        <option value=\"en-US\">US (en-US)</option>
       </select>
-      <span class=\"hint\">拼写题请先点 🔊 播放读音，再输入拼写。</span>
+      <span class=\"hint\">For spelling: tap 🔊 first, then type or handwrite.</span>
     </div>
     <div id=\"list\"></div>
     <div id=\"pager\" class=\"pager hidden\">
-      <button id=\"prev-page\" class=\"secondary\">上一页</button>
+      <button id=\"prev-page\" class=\"secondary\">Prev Page</button>
       <span id=\"page-info\" class=\"hint\"></span>
-      <button id=\"next-page\" class=\"secondary\">下一页</button>
+      <button id=\"next-page\" class=\"secondary\">Next Page</button>
     </div>
     <div class=\"actions\">
-      <button id=\"submit\" class=\"primary\">提交当前练习</button>
-      <span class=\"hint\">可通过 URL hash 切换：#spell / #match</span>
+      <button id=\"submit\" class=\"primary\">Submit Current Matching</button>
+      <span class=\"hint\">Hash shortcuts: #spell / #match</span>
     </div>
     <div id=\"result\" class=\"result\"></div>
   </div>
@@ -361,11 +406,28 @@ def _render_daily_combo_page(*, user_id: int, words: list[dict], spell_questions
     const pageInfo = document.getElementById('page-info');
     const accentSelect = document.getElementById('accent');
     const audioCache = new Map();
+    const submitBtn = document.getElementById('submit');
+    const encouragements = [
+      'Well done!',
+      'Excellent!',
+      'Great job!',
+      'You nailed it!',
+      'Brilliant!',
+      'Fantastic!'
+    ];
 
     const state = {{
       matchPage: 0,
       activeLeft: null,
       matchSelections: {{}},
+      spellIndex: 0,
+      spellAttemptByUid: {{}},
+      spellSummary: {{
+        totalWords: (data.spell || []).length,
+        totalAttempts: 0,
+        completed: 0,
+        mistakes: {{}},
+      }},
     }};
 
     function currentQuestions() {{
@@ -378,6 +440,10 @@ def _render_daily_combo_page(*, user_id: int, words: list[dict], spell_questions
 
     function currentMatchPage() {{
       return data.match_pages[state.matchPage] || {{ pairs: [], definitions: [] }};
+    }}
+
+    function normalizeSpelling(value) {{
+      return String(value || '').trim().toLowerCase();
     }}
 
     async function persistAttempts(attempts) {{
@@ -417,6 +483,10 @@ def _render_daily_combo_page(*, user_id: int, words: list[dict], spell_questions
       return {{ saved, failed }};
     }}
 
+    async function persistSingleAttempt(attempt) {{
+      return persistAttempts([attempt]);
+    }}
+
     function playAudio(word, btn) {{
       if (!word) return;
       const accent = accentSelect.value || 'en-GB';
@@ -441,7 +511,7 @@ def _render_daily_combo_page(*, user_id: int, words: list[dict], spell_questions
       btn.disabled = true;
       loadAndPlay()
         .catch((err) => {{
-          alert('读音播放失败: ' + err.message);
+          alert('Audio playback failed: ' + err.message);
         }})
         .finally(() => {{
           btn.disabled = false;
@@ -506,11 +576,11 @@ def _render_daily_combo_page(*, user_id: int, words: list[dict], spell_questions
         <div class="match-shell">
           <svg id="line-layer" class="line-layer"></svg>
           <section class="match-col">
-            <div class="col-title">左侧单词（先点这里）</div>
+            <div class="col-title">Words (tap here first)</div>
             <div class="match-list" id="left-list"></div>
           </section>
           <section class="match-col">
-            <div class="col-title">右侧释义（再点这里）</div>
+            <div class="col-title">Definitions (tap here second)</div>
             <div class="match-list" id="right-list"></div>
           </section>
         </div>
@@ -557,24 +627,280 @@ def _render_daily_combo_page(*, user_id: int, words: list[dict], spell_questions
       drawLines();
     }}
 
-    function renderSpellCards() {{
-      list.innerHTML = '';
-      const questions = data.spell || [];
-      questions.forEach((q, idx) => {{
-        const card = document.createElement('div');
-        card.className = 'card';
-        card.innerHTML = `
-          <div class="spell-head">
-            <div><b>#${{idx + 1}}</b> 点击发音并拼写</div>
-            <button type="button" class="audio-btn" data-word="${{q.answer}}">🔊 播放读音</button>
+    function renderSpellSummary() {{
+      const totalWords = state.spellSummary.totalWords || 1;
+      const completed = state.spellSummary.completed;
+      const attempts = state.spellSummary.totalAttempts;
+      const accuracy = Math.round((completed / totalWords) * 100);
+      const mistakeWords = Object.keys(state.spellSummary.mistakes);
+      const mistakesHtml = mistakeWords.length
+        ? `<ul>${{mistakeWords.map((word) => `<li>${{word}}</li>`).join('')}}</ul>`
+        : '<p>No wrong words in this round.</p>';
+      list.innerHTML = `
+        <div class="summary-card">
+          <h3>Spelling Session Complete</h3>
+          <p><b>Words:</b> ${{totalWords}}</p>
+          <p><b>Completed:</b> ${{completed}} / ${{totalWords}}</p>
+          <p><b>Total attempts:</b> ${{attempts}}</p>
+          <p><b>Completion accuracy:</b> ${{accuracy}}%</p>
+          <h4>Words to revisit</h4>
+          ${{mistakesHtml}}
+          <div class="spell-actions">
+            <button id="restart-spell" class="secondary" type="button">Practice Again</button>
+            <a href="#match" class="secondary" style="text-decoration:none;display:inline-flex;align-items:center;">Go to Definition Match</a>
           </div>
-          <div class="clue">${{q.clue || '点击🔊播放读音后拼写。'}}</div>
-          <input data-idx="${{idx}}" data-kind="spell" placeholder="请输入拼写" />
-        `;
-        list.appendChild(card);
+        </div>
+      `;
+      const restart = document.getElementById('restart-spell');
+      if (restart) {{
+        restart.addEventListener('click', () => {{
+          state.spellIndex = 0;
+          state.spellAttemptByUid = {{}};
+          state.spellSummary = {{
+            totalWords: (data.spell || []).length,
+            totalAttempts: 0,
+            completed: 0,
+            mistakes: {{}},
+          }};
+          result.textContent = '';
+          render();
+        }});
+      }}
+    }}
+
+    function bindInkCanvas(canvas) {{
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = '#0f172a';
+      let drawing = false;
+      let lastX = 0;
+      let lastY = 0;
+
+      const point = (event) => {{
+        const rect = canvas.getBoundingClientRect();
+        return {{
+          x: (event.clientX - rect.left) * (canvas.width / rect.width),
+          y: (event.clientY - rect.top) * (canvas.height / rect.height),
+        }};
+      }};
+
+      const start = (event) => {{
+        const p = point(event);
+        drawing = true;
+        lastX = p.x;
+        lastY = p.y;
+      }};
+      const move = (event) => {{
+        if (!drawing) return;
+        const p = point(event);
+        ctx.beginPath();
+        ctx.moveTo(lastX, lastY);
+        ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+        lastX = p.x;
+        lastY = p.y;
+      }};
+      const end = () => {{
+        drawing = false;
+      }};
+
+      canvas.addEventListener('pointerdown', (event) => {{
+        event.preventDefault();
+        start(event);
       }});
-      list.querySelectorAll('.audio-btn').forEach((btn) => {{
-        btn.addEventListener('click', () => playAudio(btn.dataset.word || '', btn));
+      canvas.addEventListener('pointermove', (event) => {{
+        event.preventDefault();
+        move(event);
+      }});
+      canvas.addEventListener('pointerup', end);
+      canvas.addEventListener('pointerleave', end);
+      canvas.addEventListener('pointercancel', end);
+    }}
+
+    function hasInkStrokes(canvas) {{
+      const ctx = canvas && canvas.getContext('2d');
+      if (!ctx) return false;
+      const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      let darkPixels = 0;
+      for (let i = 0; i < data.length; i += 16) {{
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const a = data[i + 3];
+        if (a < 16) continue;
+        const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        if (luminance < 245) {{
+          darkPixels += 1;
+          if (darkPixels >= 60) return true;
+        }}
+      }}
+      return false;
+    }}
+
+    async function recognizeInk(canvas, inputNode, feedbackNode) {{
+      try {{
+        if (!hasInkStrokes(canvas)) {{
+          feedbackNode.className = 'feedback bad';
+          feedbackNode.textContent = 'Write on the pad first.';
+          return;
+        }}
+        feedbackNode.className = 'feedback';
+        feedbackNode.textContent = 'Recognizing handwriting...';
+        const dataUrl = canvas.toDataURL('image/png');
+        const res = await fetch('/api/handwriting/recognize', {{
+          method: 'POST',
+          headers: {{ 'Content-Type': 'application/json' }},
+          body: JSON.stringify({{ image_data_url: dataUrl }}),
+        }});
+        if (!res.ok) {{
+          throw new Error(await res.text());
+        }}
+        const payload = await res.json();
+        if (!payload.text) {{
+          throw new Error('No text recognized');
+        }}
+        inputNode.value = payload.text;
+        feedbackNode.className = 'feedback good';
+        feedbackNode.textContent = `Recognized: ${{payload.text}}`;
+      }} catch (err) {{
+        feedbackNode.className = 'feedback bad';
+        feedbackNode.textContent = `Recognition failed: ${{err.message}}`;
+      }}
+    }}
+
+    function renderSpellStep() {{
+      const questions = data.spell || [];
+      if (!questions.length) {{
+        list.innerHTML = '<div class="card">No spelling words for today.</div>';
+        return;
+      }}
+      if (state.spellIndex >= questions.length) {{
+        renderSpellSummary();
+        return;
+      }}
+
+      const q = questions[state.spellIndex];
+      const uid = String(q.uid || state.spellIndex);
+      const attempts = Number(state.spellAttemptByUid[uid] || 0);
+      const revealAnswer = attempts >= 3;
+
+      list.innerHTML = `
+        <div class="card">
+          <div class="spell-progress">Word ${{state.spellIndex + 1}} / ${{questions.length}}</div>
+          <div class="spell-head">
+            <div><b>Listen and spell</b></div>
+            <button type="button" id="spell-audio" class="audio-btn" data-word="${{q.answer}}">🔊 Play Audio</button>
+          </div>
+          <div class="clue">${{q.clue || 'Tap 🔊 then spell the word.'}}</div>
+          <input id="spell-input" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Type the spelling here" />
+
+          <div class="ink-wrap">
+            <div class="ink-tools">
+              <button type="button" id="ink-recognize" class="secondary">Recognize Handwriting</button>
+              <button type="button" id="ink-clear" class="secondary">Clear Pad</button>
+            </div>
+            <canvas id="ink-canvas" width="1000" height="320"></canvas>
+            <div class="hint small">Use finger/stylus to write. Recognition is best-effort.</div>
+          </div>
+
+          <button type="button" id="spell-submit" class="big-submit">Submit</button>
+          <div id="spell-feedback" class="feedback"></div>
+          <div id="spell-post-actions" class="spell-actions ${{revealAnswer ? '' : 'hidden'}}">
+            <button type="button" id="retry-word" class="secondary">Try Again</button>
+            <button type="button" id="next-word" class="secondary">Next Word</button>
+          </div>
+        </div>
+      `;
+
+      const input = document.getElementById('spell-input');
+      const audioBtn = document.getElementById('spell-audio');
+      const feedback = document.getElementById('spell-feedback');
+      const postActions = document.getElementById('spell-post-actions');
+      const canvas = document.getElementById('ink-canvas');
+      bindInkCanvas(canvas);
+
+      audioBtn.addEventListener('click', () => playAudio(audioBtn.dataset.word || '', audioBtn));
+      document.getElementById('ink-clear').addEventListener('click', () => {{
+        const ctx = canvas.getContext('2d');
+        if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }});
+      document.getElementById('ink-recognize').addEventListener('click', () => recognizeInk(canvas, input, feedback));
+
+      const goNext = () => {{
+        state.spellIndex += 1;
+        result.textContent = '';
+        render();
+      }};
+
+      if (revealAnswer) {{
+        feedback.className = 'feedback bad';
+        feedback.textContent = `Correct answer: ${{q.answer}}`;
+      }}
+
+      document.getElementById('retry-word').addEventListener('click', () => {{
+        state.spellAttemptByUid[uid] = 0;
+        input.value = '';
+        feedback.className = 'feedback';
+        feedback.textContent = '';
+        postActions.classList.add('hidden');
+        const ctx = canvas.getContext('2d');
+        if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }});
+      document.getElementById('next-word').addEventListener('click', goNext);
+
+      document.getElementById('spell-submit').addEventListener('click', async () => {{
+        const user = normalizeSpelling(input.value);
+        const expected = normalizeSpelling(q.answer);
+        if (!user) {{
+          feedback.className = 'feedback bad';
+          feedback.textContent = 'Type or recognize a spelling first.';
+          return;
+        }}
+
+        state.spellSummary.totalAttempts += 1;
+        state.spellAttemptByUid[uid] = Number(state.spellAttemptByUid[uid] || 0) + 1;
+        const attemptCount = state.spellAttemptByUid[uid];
+        const passed = user === expected;
+        await persistSingleAttempt({{
+          word_id: Number(q.word_id || 0),
+          passed,
+          mode: 'SPELLING',
+          error_type: 'SPELLING',
+          user_answer: user || '',
+          correct_answer: expected,
+        }});
+
+        if (passed) {{
+          state.spellSummary.completed += 1;
+          const msg = encouragements[Math.floor(Math.random() * encouragements.length)];
+          feedback.className = 'feedback good';
+          feedback.textContent = `${{msg}} ✔`;
+          setTimeout(goNext, 700);
+          return;
+        }}
+
+        state.spellSummary.mistakes[expected] = true;
+        if (attemptCount >= 3) {{
+          feedback.className = 'feedback bad';
+          feedback.textContent = `Not quite. Correct answer: ${{q.answer}}`;
+          postActions.classList.remove('hidden');
+        }} else {{
+          feedback.className = 'feedback bad';
+          feedback.textContent = `Try again (${{
+            attemptCount
+          }}/3).`;
+        }}
+      }});
+
+      input.addEventListener('keydown', (event) => {{
+        if (event.key === 'Enter') {{
+          event.preventDefault();
+          document.getElementById('spell-submit').click();
+        }}
       }});
     }}
 
@@ -584,7 +910,7 @@ def _render_daily_combo_page(*, user_id: int, words: list[dict], spell_questions
         return;
       }}
       pager.classList.remove('hidden');
-      pageInfo.textContent = `第 ${{state.matchPage + 1}} / ${{data.match_pages.length}} 页（每页最多 ${{data.match_page_size}} 词）`;
+      pageInfo.textContent = `Page ${{state.matchPage + 1}} / ${{data.match_pages.length}} (up to ${{data.match_page_size}} words/page)`;
       document.getElementById('prev-page').disabled = state.matchPage <= 0;
       document.getElementById('next-page').disabled = state.matchPage >= data.match_pages.length - 1;
     }}
@@ -593,11 +919,15 @@ def _render_daily_combo_page(*, user_id: int, words: list[dict], spell_questions
       buttons.forEach(btn => btn.classList.toggle('active', btn.dataset.mode === mode));
       if (mode === 'match') {{
         renderMatchBoard();
+        submitBtn.classList.remove('hidden');
       }} else {{
-        renderSpellCards();
+        renderSpellStep();
+        submitBtn.classList.add('hidden');
       }}
       updatePager();
-      result.textContent = '';
+      if (mode !== 'match') {{
+        result.textContent = '';
+      }}
     }}
 
     buttons.forEach(btn => btn.addEventListener('click', () => {{
@@ -659,7 +989,7 @@ def _render_daily_combo_page(*, user_id: int, words: list[dict], spell_questions
             if (chosen === expected) {{
               correct += 1;
             }} else {{
-              mistakes.push(`- ${{pair.word}} => 你的匹配: ${{chosen || '(空)'}}，正确词: ${{expected}}`);
+              mistakes.push(`- ${{pair.word}} => your choice: ${{chosen || '(blank)'}}, expected: ${{expected}}`);
             }}
           }});
         }});
@@ -682,7 +1012,7 @@ def _render_daily_combo_page(*, user_id: int, words: list[dict], spell_questions
           if (user === expected) {{
             correct += 1;
           }} else {{
-            mistakes.push(`- #${{idx + 1}} 你的拼写: ${{user || '(空)'}}，正确: ${{expected}}`);
+            mistakes.push(`- #${{idx + 1}} your spelling: ${{user || '(blank)'}}, expected: ${{expected}}`);
           }}
         }});
       }}
@@ -690,11 +1020,12 @@ def _render_daily_combo_page(*, user_id: int, words: list[dict], spell_questions
       total = total || 1;
       const score = Math.round((correct / total) * 100);
       const recordSummary = await persistAttempts(attempts);
-      const head = `模式: ${{mode === 'match' ? '释义匹配' : '拼写练习'}}\\n得分: ${{score}} 分 (${{correct}}/${{total}})`;
-      const records = `\\n记录: 已写入 ${{recordSummary.saved}} 条${{recordSummary.failed ? `，失败 ${{recordSummary.failed}} 条` : ''}}`;
+      const head = `Mode: ${{mode === 'match' ? 'Definition Match' : 'Spelling'}}\\nScore: ${{score}} (${{correct}}/${{total}})`;
+      const records = `\\nSaved attempts: ${{recordSummary.saved}}${{recordSummary.failed ? `, failed writes ${{recordSummary.failed}}` : ''}}`;
       result.textContent = mistakes.length
-        ? head + records + "\\n错题:\\n" + mistakes.join("\\n")
-        : head + records + "\\n全对！";
+        ? head + records + "\\nMistakes:\\n" + mistakes.join("\\n")
+        : head + records + "\\nPerfect!";
+      result.className = mistakes.length ? 'result bad' : 'result good';
     }});
 
     render();
@@ -735,7 +1066,8 @@ def _compose_definition(word: dict, *, lemma: str, default: str) -> str:
     en_list = [str(item).strip() for item in (word.get("meaning_en") or []) if str(item).strip()]
     zh = zh_list[0] if zh_list else ""
     en = en_list[0] if en_list else ""
-    combined = f"{zh} / {en}".strip(" /")
+    parts = [part for part in (en, zh) if part]
+    combined = " / ".join(parts).strip()
     if not combined:
         return default
     return _redact_word(combined, lemma=lemma)

@@ -118,12 +118,12 @@ def build_kids_payload(word: str) -> dict:
     return {
         "word": titled,
         "phonetic": _phonetic_stub(word),
-        "core_semantics": f"{titled} 是一个你可以在校园阅读和写作里马上用起来的词。",
+        "core_semantics": f"{titled} is a practical word you can use right away in school reading and writing.",
         "examples": [
             f"I saw the word {word} in my reading homework.",
             f"I can use {word} when I explain this idea.",
         ],
-        "today_action": "拆成发音节奏，读 3 次，再写 1 个句子。",
+        "today_action": "Break it into sounds, read it 3 times, then write one sentence with it.",
     }
 
 
@@ -212,7 +212,7 @@ def generate_card(
             latest_hash = str(existing.get("content_hash") or "")
             draft_hash = hashlib.sha256(json.dumps(payload, ensure_ascii=False).encode("utf-8")).hexdigest()
             if latest_hash and draft_hash == latest_hash:
-                payload["epiphany"] = _trim_text(f"{payload['epiphany']}（重生成版）", 220)
+                payload["epiphany"] = _trim_text(f"{payload['epiphany']} (regenerated angle)", 220)
         html = _render_museum_html(payload)
     else:
         payload = build_kids_payload(normalized)
@@ -373,7 +373,7 @@ def _build_museum_payload_with_llm(
         "mermaid_code": mermaid_code,
         "topology_source": topology_source,
         "epiphany": epiphany,
-        "confidence_note": "词源与历史来源可能存在近似表述，建议以权威词典核验。",
+        "confidence_note": "Etymology may include learning-oriented approximations. Please cross-check with authoritative dictionaries. / 词源解释可能含教学化近似，建议与权威词典交叉核验。",
     }
     try:
         ensure_museum_payload(payload)
@@ -451,7 +451,10 @@ def _build_museum_payload_fallback(word: str, *, word_row: dict | None, regenera
     nuance_text = _render_bilingual_bullets(zh_items=nuance_points_zh, en_items=nuance_points_en, cls="nuance-list")
 
     example_sentence = info.get("example_sentence") or f"I used {word} in my own sentence to make the meaning clear."
-    epiphany = info.get("epiphany") or f"掌握 {word.capitalize()}，关键不是死记，而是把它放进你自己的句子。"
+    epiphany = info.get("epiphany") or (
+        f"Mastering {word.capitalize()} is not about rote memory; it is about using it in your own sentence. / "
+        f"掌握 {word.capitalize()} 不是死记，而是把它放进你自己的句子。"
+    )
     mermaid_code = _normalize_mermaid_graph_td(str(info.get("mermaid_code") or ""))
     if not mermaid_code:
         mermaid_code = _build_semantic_topology(
@@ -475,7 +478,7 @@ def _build_museum_payload_fallback(word: str, *, word_row: dict | None, regenera
         "mermaid_code": mermaid_code,
         "topology_source": "fallback",
         "epiphany": epiphany,
-        "confidence_note": "词源与历史来源可能存在近似表述，建议以权威词典核验。",
+        "confidence_note": "Etymology may include learning-oriented approximations. Please cross-check with authoritative dictionaries. / 词源解释可能含教学化近似，建议与权威词典交叉核验。",
     }
 
 
@@ -558,12 +561,12 @@ def _render_bilingual_core(
 ) -> str:
     return "".join(
         [
-            f"<div class=\"bi-zh\"><b>原始画面</b>: {escape(origin_scene_zh)}</div>",
             f"<div class=\"bi-en\"><b>Origin Scene</b>: {escape(origin_scene_en)}</div><br>",
-            f"<div class=\"bi-zh\"><b>核心意象</b>: {escape(core_formula_zh)}</div>",
+            f"<div class=\"bi-zh\"><b>原始画面</b>: {escape(origin_scene_zh)}</div><br>",
             f"<div class=\"bi-en\"><b>Core Formula</b>: {escape(core_formula_en)}</div><br>",
-            f"<div class=\"bi-zh\">{escape(explanation_zh)}</div>",
+            f"<div class=\"bi-zh\"><b>核心意象</b>: {escape(core_formula_zh)}</div><br>",
             f"<div class=\"bi-en\">{escape(explanation_en)}</div>",
+            f"<div class=\"bi-zh\">{escape(explanation_zh)}</div>",
         ]
     )
 
@@ -572,8 +575,8 @@ def _render_bilingual_etymology(*, zh_text: str, en_text: str, cognates: list[st
     cognates_html = _render_bullets(cognates, cls="nuance-list")
     return "".join(
         [
-            f"<div class=\"bi-zh\"><b>中文</b>: {escape(zh_text)}</div>",
             f"<div class=\"bi-en\"><b>English</b>: {escape(en_text)}</div>",
+            f"<div class=\"bi-zh\"><b>中文</b>: {escape(zh_text)}</div>",
             cognates_html,
         ]
     )
@@ -595,8 +598,8 @@ def _render_bilingual_bullets(*, zh_items: list[str], en_items: list[str], cls: 
             "".join(
                 [
                     "<li class=\"nuance-item\">",
-                    f"<div class=\"bi-zh\">{escape(zh)}</div>",
                     f"<div class=\"bi-en\">{escape(en)}</div>",
+                    f"<div class=\"bi-zh\">{escape(zh)}</div>",
                     "</li>",
                 ]
             )

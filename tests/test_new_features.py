@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import word_assistance.app as app_module
 from word_assistance.config import ARTIFACTS_DIR
+from word_assistance.exercises.generator import _compose_definition
 
 
 def _seed_wrong_word(client):
@@ -216,7 +218,7 @@ def test_chat_can_list_words_from_natural_language(client):
     assert resp.status_code == 200
     payload = resp.json()
     assert payload["route_command"] == "/words"
-    assert "词库单词如下" in payload["reply"]
+    assert "Vocabulary words" in payload["reply"]
 
 
 def test_game_spell_and_match_share_cached_daily_page(client):
@@ -287,6 +289,7 @@ def test_learning_hub_sidebar_scroll_card_fit_and_pron_button(client):
     assert "doc.body.style.overflowY = 'auto'" in html
     assert "html.style.overflowY = 'auto'" in html
     assert "scaleW" not in html
+    assert "@media (max-width: 760px)" in html
 
 
 def test_daily_spell_page_hides_answer_word_and_uses_audio_trigger(client):
@@ -297,7 +300,7 @@ def test_daily_spell_page_hides_answer_word_and_uses_audio_trigger(client):
     item_ids = [x["id"] for x in preview.json()["preview_items"]]
     client.post("/api/import/commit", json={"import_id": preview.json()["import_id"], "accepted_item_ids": item_ids})
 
-    payload = client.post("/api/chat", json={"user_id": 2, "message": "/game spelling"}).json()
+    payload = client.post("/api/chat", json={"user_id": 2, "message": "/game spelling --new"}).json()
     spell_url = payload["links"][0]
     html_url = spell_url.split("#")[0]
     html_path = ARTIFACTS_DIR / html_url.replace("/artifacts/", "")
@@ -307,6 +310,14 @@ def test_daily_spell_page_hides_answer_word_and_uses_audio_trigger(client):
     assert "audio-btn" in html
     assert "/api/speech/tts" in html
     assert "/api/review" in html
+    assert "renderSpellStep" in html
+    assert "Recognize Handwriting" in html
+    assert "hasInkStrokes" in html
+    assert "Write on the pad first." in html
+    assert "Try Again" in html
+    assert "Next Word" in html
+    assert "const revealAnswer = attempts >= 3;" in html
+    assert "renderSpellSummary" in html
 
 
 def test_daily_match_page_is_definition_matching_with_pagination(client):
@@ -324,7 +335,7 @@ def test_daily_match_page_is_definition_matching_with_pagination(client):
     html_path = ARTIFACTS_DIR / html_url.replace("/artifacts/", "")
     html = Path(html_path).read_text(encoding="utf-8")
 
-    assert "释义匹配" in html
+    assert "Definition Match" in html
     assert "match-shell" in html
     assert "line-layer" in html
     assert "data.match_page_size" in html
@@ -459,7 +470,7 @@ def test_card_command_unknown_word_does_not_auto_insert_into_vocab(client):
     resp = client.post("/api/chat", json={"user_id": 2, "message": "/card intergalactic"})
     assert resp.status_code == 200
     payload = resp.json()
-    assert "未自动新增" in payload["reply"]
+    assert "not auto-added to vocabulary" in payload["reply"]
     assert payload["links"]
     assert "/artifacts/dictionary/" in payload["links"][0]
 
@@ -499,3 +510,37 @@ def test_import_text_respects_auto_accept_threshold(client):
     low_item = low_threshold.json()["preview_items"][0]
     assert low_item["accepted"] == 1
     assert low_item["needs_confirmation"] is False
+
+
+def test_handwriting_recognize_endpoint_returns_candidates(client, monkeypatch):
+    monkeypatch.setattr(
+        app_module,
+        "extract_text_from_bytes",
+        lambda *_args, **_kwargs: "Accommodate, ANTENNA 123",
+    )
+
+    resp = client.post(
+        "/api/handwriting/recognize",
+        json={"image_data_url": "data:image/png;base64,aGVsbG8="},
+    )
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["ok"] is True
+    assert payload["text"] == "accommodate"
+    assert payload["candidates"][:2] == ["accommodate", "antenna"]
+
+
+def test_compose_definition_prefers_english_then_chinese():
+    text = _compose_definition(
+        {"meaning_en": ["to assess value"], "meaning_zh": ["评估价值"]},
+        lemma="appraise",
+        default="fallback",
+    )
+    assert text == "to assess value / 评估价值"
+
+
+def test_favicon_endpoint_is_available(client):
+    resp = client.get("/favicon.ico")
+    assert resp.status_code == 200
+    assert resp.headers.get("content-type", "").startswith("image/svg+xml")
+    assert "<svg" in resp.text

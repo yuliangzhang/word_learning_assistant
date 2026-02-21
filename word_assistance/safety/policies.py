@@ -57,7 +57,7 @@ def validate_child_request(message: str) -> SafetyCheck:
     if any(term in lowered for term in blocked_terms):
         return SafetyCheck(
             allowed=False,
-            reason="这个操作需要家长审批。请让家长账号在安全设置里处理。",
+            reason="This action requires parent approval. Please use the parent account in safety settings.",
         )
     return SafetyCheck(allowed=True)
 

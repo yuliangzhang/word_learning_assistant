@@ -22,7 +22,7 @@ def handle_chat_message(db: Database, user_id: int, message: str, limits: DailyL
     limits = limits or DailyLimits()
     message = message.strip()
     if not message:
-        return {"reply": "你可以先输入 /today 看今日任务。"}
+        return {"reply": "Try /today to view today's plan."}
 
     check = validate_child_request(message)
     if not check.allowed:
@@ -36,7 +36,7 @@ def handle_chat_message(db: Database, user_id: int, message: str, limits: DailyL
         return _cmd_learn_with_words(db, user_id, limits, custom_words, regenerate=False)
 
     lowered = message.lower()
-    if "开始学习" in message or "学习词库" in message or "开始背单词" in message:
+    if "开始学习" in message or "学习词库" in message or "开始背单词" in message or "start learning" in lowered:
         return _cmd_learn(db, user_id, limits, regenerate=False)
     if "今日任务" in message or "today" in lowered:
         return _cmd_today(db, user_id, limits)
@@ -57,17 +57,17 @@ def handle_chat_message(db: Database, user_id: int, message: str, limits: DailyL
                 regenerate=False,
             )
             return {
-                "reply": f"我先给你做了 {word} 的 Kids 卡。下一步可以继续生成 Museum 卡。",
+                "reply": f"I generated a Kids card for {word}. You can generate a Museum card next.",
                 "links": [card["url"]],
             }
         card = generate_dictionary_card(word=word, regenerate=False)
         return {
-            "reply": f"{word} 当前不在词库中。我先生成了查阅卡（不会自动入库），需要的话可在查词页点击“加入词库”。",
+            "reply": f"{word} is not in vocabulary yet. I generated a lookup card (not auto-added). Use 'Add to Vocabulary' if needed.",
             "links": [card["url"]],
         }
 
     return {
-        "reply": "我能帮你做这些：/learn /today /words /review /card <word> /game spelling /game match /report week",
+        "reply": "I can execute: /learn /today /words /review /card <word> /game spelling /game match /report week",
     }
 
 
@@ -96,11 +96,11 @@ def _handle_command(db: Database, user_id: int, command: str, limits: DailyLimit
         return _cmd_mistakes(db, user_id)
     if cmd == "/fix":
         if len(parts) < 3:
-            return {"reply": "用法: /fix wrong correct，例如 /fix antena antenna"}
+            return {"reply": "Usage: /fix wrong correct (example: /fix antena antenna)"}
         return _cmd_fix(db, user_id=user_id, wrong=parts[1], correct=parts[2])
     if cmd == "/card":
         if len(parts) < 2:
-            return {"reply": "用法: /card antenna"}
+            return {"reply": "Usage: /card antenna"}
         word = parts[1]
         regenerate = "--new" in parts or "--regenerate" in parts
         normalized = word.strip().lower()
@@ -112,12 +112,12 @@ def _handle_command(db: Database, user_id: int, command: str, limits: DailyLimit
                 card_type="MUSEUM",
                 regenerate=regenerate,
             )
-            info = "已返回历史版本" if card["cached"] else "已生成新版本"
-            return {"reply": f"{info} Museum 卡片：{normalized}", "links": [card["url"]]}
+            info = "Loaded cached version" if card["cached"] else "Generated new version"
+            return {"reply": f"{info}: Museum card for {normalized}", "links": [card["url"]]}
         card = generate_dictionary_card(word=normalized, regenerate=regenerate)
-        info = "已返回历史版本" if card["cached"] else "已生成新版本"
+        info = "Loaded cached version" if card["cached"] else "Generated new version"
         return {
-            "reply": f"{info} 查阅卡：{normalized}（当前未入词库，未自动新增）",
+            "reply": f"{info}: Lookup card for {normalized} (not auto-added to vocabulary)",
             "links": [card["url"]],
         }
     if cmd == "/game":
@@ -129,7 +129,7 @@ def _handle_command(db: Database, user_id: int, command: str, limits: DailyLimit
 
     return {
         "reply": (
-            "暂不支持该命令。可用命令: "
+            "Unsupported command. Available commands: "
             "/learn /learn --words appraise,bolster /today /words /review /new 8 /mistakes "
             "/fix wrong correct /card /game spelling|match|daily /report week"
         )
@@ -141,7 +141,7 @@ def _cmd_learn(db: Database, user_id: int, limits: DailyLimits, *, regenerate: b
     learning_pool = _collect_today_learning_pool(task)
     if not learning_pool:
         return {
-            "reply": "词库暂时为空。先上传单词后，我可以自动生成卡片和练习。"
+            "reply": "Your vocabulary is empty. Import words first, then I can generate cards and practice."
         }
     learning_pool = ensure_words_enriched(db, user_id=user_id, words=learning_pool)
 
@@ -164,8 +164,8 @@ def _cmd_learn(db: Database, user_id: int, limits: DailyLimits, *, regenerate: b
 
     return {
         "reply": (
-            f"学习链路已准备好：左侧单词列表 + 右侧词卡工作台（共 {len(ranked)} 词），"
-            f"并已连接今日拼写/释义匹配练习。排序已按历史错题与复习状态自适应优化，当前优先词：{focus_word}。"
+            f"Learning flow is ready: left word list + right card workspace ({len(ranked)} words). "
+            f"Connected to today's spelling + definition match practice. Current priority word: {focus_word}."
         ),
         "links": [hub_url, f"{practice_url}#spell", f"{practice_url}#match"],
         "data": {
@@ -187,7 +187,7 @@ def _cmd_learn_with_words(
 ) -> dict:
     requested = _normalize_learning_words(words)
     if not requested:
-        return {"reply": "没有识别到有效单词，请用英文单词列表重试。"}
+        return {"reply": "No valid words detected. Please provide an English word list and retry."}
 
     inserted = _ensure_words_in_vocabulary(db, user_id=user_id, words=requested)
     selected_rows: list[dict] = []
@@ -196,13 +196,13 @@ def _cmd_learn_with_words(
         if row is not None:
             selected_rows.append(row)
     if not selected_rows:
-        return {"reply": "指定单词暂未成功入库，请重试。"}
+        return {"reply": "Failed to insert the requested words. Please try again."}
 
     selected_rows = ensure_words_enriched(db, user_id=user_id, words=selected_rows)
     by_lemma = {str(item.get("lemma", "")).lower(): item for item in selected_rows}
     ordered = [by_lemma[lemma] for lemma in requested if lemma in by_lemma]
     if not ordered:
-        return {"reply": "指定单词暂未成功入库，请重试。"}
+        return {"reply": "Failed to insert the requested words. Please try again."}
 
     practice_path, practice_meta = build_daily_combo_exercise(
         user_id=user_id,
@@ -221,8 +221,8 @@ def _cmd_learn_with_words(
 
     return {
         "reply": (
-            f"已按你的指定单词生成学习链路：共 {len(ordered)} 词，新增入库 {inserted} 词。"
-            f"当前优先词：{focus_word}。"
+            f"Generated a custom learning flow from your requested list: {len(ordered)} words, {inserted} newly added. "
+            f"Current priority word: {focus_word}."
         ),
         "links": [hub_url, f"{practice_url}#spell", f"{practice_url}#match"],
         "data": {
@@ -243,9 +243,9 @@ def _cmd_today(db: Database, user_id: int, limits: DailyLimits) -> dict:
     review_words = [w["lemma"] for w in task["review"]]
     new_words = [w["lemma"] for w in task["new"]]
     reply = (
-        f"今日任务：复习 {len(review_words)} 个，新词 {len(new_words)} 个。\n"
-        f"复习词：{', '.join(review_words[:12]) or '暂无'}\n"
-        f"新词：{', '.join(new_words[:12]) or '暂无'}"
+        f"Today's plan: {len(review_words)} review words, {len(new_words)} new words.\n"
+        f"Review: {', '.join(review_words[:12]) or 'none'}\n"
+        f"New: {', '.join(new_words[:12]) or 'none'}"
     )
     return {"reply": reply, "data": task}
 
@@ -254,22 +254,22 @@ def _cmd_review(db: Database, user_id: int, limits: DailyLimits) -> dict:
     task = db.get_today_task(user_id, limits)
     review_words = [w["lemma"] for w in task["review"]]
     if not review_words:
-        return {"reply": "今天到期复习词为 0，可以先输入 /today 看新词任务。"}
-    return {"reply": f"开始复习：{', '.join(review_words[:15])}"}
+        return {"reply": "No review words are due today. Run /today to see new words."}
+    return {"reply": f"Start review: {', '.join(review_words[:15])}"}
 
 
 def _cmd_words(db: Database, user_id: int) -> dict:
     words = db.list_words(user_id=user_id, limit=200)
     if not words:
-        return {"reply": "词库还是空的，先上传一批单词吧。"}
+        return {"reply": "Vocabulary is still empty. Import a word list first."}
 
     lines = [
         f"{idx + 1}. {item['lemma']} ({item['status']})"
         for idx, item in enumerate(words[:20])
     ]
-    suffix = "" if len(words) <= 20 else f"\n...共 {len(words)} 个，已展示前 20 个。"
+    suffix = "" if len(words) <= 20 else f"\n...total {len(words)}, showing first 20."
     return {
-        "reply": "词库单词如下：\n" + "\n".join(lines) + suffix,
+        "reply": "Vocabulary words:\n" + "\n".join(lines) + suffix,
         "data": {"count": len(words)},
     }
 
@@ -277,20 +277,20 @@ def _cmd_words(db: Database, user_id: int) -> dict:
 def _cmd_mistakes(db: Database, user_id: int) -> dict:
     mistakes = db.list_mistakes(user_id=user_id, limit=20)
     if not mistakes:
-        return {"reply": "目前还没有错题记录。"}
-    lines = [f"{idx + 1}. {m['lemma']} (错 {m['fail_count']} 次)" for idx, m in enumerate(mistakes[:10])]
-    return {"reply": "常错词 Top:\n" + "\n".join(lines), "data": mistakes}
+        return {"reply": "No mistake records yet."}
+    lines = [f"{idx + 1}. {m['lemma']} (wrong {m['fail_count']} times)" for idx, m in enumerate(mistakes[:10])]
+    return {"reply": "Top mistake words:\n" + "\n".join(lines), "data": mistakes}
 
 
 def _cmd_fix(db: Database, user_id: int, wrong: str, correct: str) -> dict:
     wrong_norm = wrong.strip().lower()
     correct_norm = correct.strip().lower()
     if not _is_word_token(wrong_norm) or not _is_word_token(correct_norm):
-        return {"reply": "修正失败：请输入英文单词，例如 /fix antena antenna"}
+        return {"reply": "Fix failed: please provide valid English words, e.g. /fix antena antenna"}
 
     target = db.get_word_by_lemma(user_id=user_id, lemma=wrong_norm)
     if target is None:
-        return {"reply": f"没有找到单词 {wrong_norm}，请先确认词库中是否存在。"}
+        return {"reply": f"Word not found: {wrong_norm}. Please confirm it exists in vocabulary."}
 
     try:
         updated = db.correct_word(
@@ -302,9 +302,9 @@ def _cmd_fix(db: Database, user_id: int, wrong: str, correct: str) -> dict:
             corrected_by_role="CHILD",
         )
     except ValueError as exc:
-        return {"reply": f"修正失败：{exc}"}
+        return {"reply": f"Fix failed: {exc}"}
 
-    return {"reply": f"已修正：{wrong_norm} -> {updated['lemma']}", "data": updated}
+    return {"reply": f"Updated: {wrong_norm} -> {updated['lemma']}", "data": updated}
 
 
 def _cmd_game(db: Database, user_id: int, mode: str, *, limits: DailyLimits, regenerate: bool = False) -> dict:
@@ -324,7 +324,7 @@ def _cmd_game(db: Database, user_id: int, mode: str, *, limits: DailyLimits, reg
     if not words:
         words = db.list_words(user_id=user_id, limit=40)
     if not words:
-        return {"reply": "词库还是空的，先上传单词再开始练习。"}
+        return {"reply": "Vocabulary is still empty. Import words before starting practice."}
     words = ensure_words_enriched(db, user_id=user_id, words=words)
 
     if session_type in {"SPELL", "MATCH", "DAILY"}:
@@ -345,10 +345,10 @@ def _cmd_game(db: Database, user_id: int, mode: str, *, limits: DailyLimits, reg
         word_ids=[w["id"] for w in words],
     )
     url = _artifact_url(html_path) + mode_hash
-    cached_note = "（缓存命中）" if meta.get("cached") else "（已更新）"
-    mode_name = "拼写+释义匹配联合练习" if session_type in {"SPELL", "MATCH", "DAILY"} else session_type
+    cached_note = "(cache hit)" if meta.get("cached") else "(updated)"
+    mode_name = "Spelling + Definition Match" if session_type in {"SPELL", "MATCH", "DAILY"} else session_type
     return {
-        "reply": f"{mode_name}已准备好，题量 {meta['questions']} 题{cached_note}。",
+        "reply": f"{mode_name} is ready. {meta['questions']} items {cached_note}.",
         "links": [url],
         "data": {"session_id": session_id, **meta},
     }
@@ -359,8 +359,8 @@ def _cmd_report_week(db: Database, user_id: int) -> dict:
     html_path, csv_path = render_week_report_files(report)
     return {
         "reply": (
-            f"周报完成：新增 {report['new_words']}，复习 {report['review_count']}，"
-            f"正确率 {round(report['accuracy'] * 100)}%，练习词 {len(report.get('word_practice_stats', []))} 个。"
+            f"Weekly report ready: new {report['new_words']}, reviews {report['review_count']}, "
+            f"accuracy {round(report['accuracy'] * 100)}%, practiced words {len(report.get('word_practice_stats', []))}."
         ),
         "links": [_artifact_url(html_path), _artifact_url(csv_path)],
         "data": report,
@@ -384,28 +384,28 @@ def render_week_report_files(report: dict) -> tuple[Path, Path]:
         for item in report.get("word_practice_stats", [])
     )
     if not practice_rows:
-        practice_rows = "<tr><td colspan='7'>本周暂无拼写/释义匹配练习记录</td></tr>"
+        practice_rows = "<tr><td colspan='7'>No spelling/definition-match practice records this week.</td></tr>"
     html = f"""<!DOCTYPE html>
-<html lang=\"zh-CN\"><head><meta charset=\"UTF-8\"><title>Weekly Report</title>
+<html lang=\"en\"><head><meta charset=\"UTF-8\"><title>Weekly Report</title>
 <style>
 body{{font-family:'Avenir Next',Arial,sans-serif;background:#f8fafc;color:#102a43;padding:20px;}}
 .card{{background:#fff;border:1px solid #d7e2ec;border-radius:12px;padding:18px;max-width:980px;margin:auto;}}
 table{{width:100%;border-collapse:collapse;margin-top:10px;}}
 th,td{{border:1px solid #d7e2ec;padding:8px;text-align:left;}}
 </style></head><body>
-<div class=\"card\"><h1>周报</h1>
-<p>新增词数: {report['new_words']} | 复习次数: {report['review_count']} | 平均正确率: {round(report['accuracy']*100)}%</p>
-<p>掌握词数: {report['mastered_words']} | 连续学习天数: {report['study_streak_days']}</p>
-<h3>单词练习统计（拼写 + 释义匹配）</h3>
-<table><thead><tr><th>单词</th><th>状态</th><th>练习总次数</th><th>正确次数</th><th>正确率</th><th>拼写次数</th><th>释义匹配次数</th></tr></thead>
+<div class=\"card\"><h1>Weekly Report</h1>
+<p>New words: {report['new_words']} | Review count: {report['review_count']} | Avg accuracy: {round(report['accuracy']*100)}%</p>
+<p>Mastered words: {report['mastered_words']} | Study streak days: {report['study_streak_days']}</p>
+<h3>Word Practice Stats (Spelling + Definition Match)</h3>
+<table><thead><tr><th>Word</th><th>Status</th><th>Total Attempts</th><th>Correct</th><th>Accuracy</th><th>Spelling</th><th>Definition Match</th></tr></thead>
 <tbody>{practice_rows}</tbody></table>
-<h3>常错词 Top20</h3>
-<table><thead><tr><th>单词</th><th>错误次数</th><th>拼写</th><th>混淆</th><th>释义</th></tr></thead>
+<h3>Top 20 Mistake Words</h3>
+<table><thead><tr><th>Word</th><th>Total Wrong</th><th>Spelling</th><th>Confusion</th><th>Meaning</th></tr></thead>
 <tbody>{html_rows}</tbody></table>
-<h3>下周建议</h3>
-<p>每日新词上限: {report['next_week_suggestion']['daily_new_limit']}</p>
-<p>复习占比: {report['next_week_suggestion']['review_ratio']}</p>
-<p>重点词: {', '.join(report['next_week_suggestion']['focus_words']) or '暂无'}</p>
+<h3>Suggestions for Next Week</h3>
+<p>Daily new-word limit: {report['next_week_suggestion']['daily_new_limit']}</p>
+<p>Review ratio: {report['next_week_suggestion']['review_ratio']}</p>
+<p>Focus words: {', '.join(report['next_week_suggestion']['focus_words']) or 'none'}</p>
 </div></body></html>"""
     html_path.write_text(html, encoding="utf-8")
 

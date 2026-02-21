@@ -135,7 +135,7 @@ class OpenClawAgentService:
             return None
 
         self._clear_failure()
-        return OpenClawTurnResult(reply=reply or "已执行。", links=links, meta=payload)
+        return OpenClawTurnResult(reply=reply or "Done.", links=links, meta=payload)
 
     def _runtime_env(self) -> dict[str, str]:
         env = os.environ.copy()

@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>单词卡查阅</title>
+  <title>Dictionary Card Lookup</title>
   <style>
     :root {
       --bg: #f3f8f5;
@@ -95,15 +95,15 @@
 <body>
   <main class="wrap">
     <section class="panel">
-      <h1 style="margin:0 0 8px;">单词卡查阅</h1>
-      <div class="muted">输入单词后可直接查看单词卡。若已缓存则直接打开，未缓存则自动生成。</div>
+      <h1 style="margin:0 0 8px;">Dictionary Card Lookup</h1>
+      <div class="muted">Type a word to view its card. Cached cards open instantly; uncached cards are generated automatically.</div>
       <div class="top-row" style="margin-top:10px;">
-        <input id="lookup-word" type="text" placeholder="输入英文单词，例如 accommodate" />
-        <button id="lookup-btn">查询单词卡</button>
-        <button id="regen-btn" class="secondary">重新生成</button>
-        <button id="add-btn" class="secondary">加入词库</button>
+        <input id="lookup-word" type="text" placeholder="Type an English word, e.g. accommodate" />
+        <button id="lookup-btn">Lookup Card</button>
+        <button id="regen-btn" class="secondary">Regenerate</button>
+        <button id="add-btn" class="secondary">Add to Vocabulary</button>
       </div>
-      <div id="lookup-status" class="status">等待查询。</div>
+      <div id="lookup-status" class="status">Waiting for query.</div>
     </section>
 
     <section class="panel">
@@ -130,7 +130,7 @@
       const raw = document.getElementById("lookup-word").value;
       const word = normalizeWord(raw);
       if (!word) {
-        setStatus("请输入要查询的单词。");
+        setStatus("Please enter a word.");
         return;
       }
       currentWord = word;
@@ -147,18 +147,18 @@
         const data = await res.json();
         document.getElementById("card-frame").src = data.url;
         currentInVocab = Boolean(data.in_vocab);
-        const cacheText = data.cached ? "命中缓存" : "已新生成";
-        const vocabText = currentInVocab ? "已在词库中" : "未加入词库";
-        setStatus(`查询成功：${word}（${cacheText}，${vocabText}）`);
+        const cacheText = data.cached ? "cache hit" : "generated";
+        const vocabText = currentInVocab ? "already in vocabulary" : "not in vocabulary";
+        setStatus(`Done: ${word} (${cacheText}, ${vocabText})`);
       } catch (err) {
-        setStatus(`查询失败: ${err.message}`);
+        setStatus(`Lookup failed: ${err.message}`);
       }
     }
 
     async function addToVocabulary() {
       const word = currentWord || normalizeWord(document.getElementById("lookup-word").value);
       if (!word) {
-        setStatus("请先查询一个单词。");
+        setStatus("Please lookup a word first.");
         return;
       }
       try {
@@ -175,9 +175,9 @@
         if (data.card_url) {
           document.getElementById("card-frame").src = data.card_url;
         }
-        setStatus(data.added ? `已加入词库：${word}` : `该词已在词库中：${word}`);
+        setStatus(data.added ? `Added to vocabulary: ${word}` : `Already in vocabulary: ${word}`);
       } catch (err) {
-        setStatus(`加入词库失败: ${err.message}`);
+        setStatus(`Add failed: ${err.message}`);
       }
     }
 

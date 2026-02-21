@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import binascii
 import csv
 import math
 from contextlib import asynccontextmanager
@@ -8,7 +10,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -17,6 +19,7 @@ from word_assistance.api.schemas import (
     ChatRequest,
     DictionaryAddRequest,
     ExerciseRequest,
+    HandwritingRecognizeRequest,
     ImportCommitRequest,
     ParentSettingsUpdateRequest,
     ReviewRequest,
@@ -39,6 +42,7 @@ from word_assistance.pipeline.importer import (
     build_import_preview_from_file,
     build_import_preview_from_text,
 )
+from word_assistance.pipeline.extraction import extract_normalized_tokens, extract_text_from_bytes, simple_lemma
 from word_assistance.scheduler.srs import next_state, state_from_row
 from word_assistance.services.backup import create_backup_bundle, restore_backup_bundle
 from word_assistance.services.llm import LLMRoute, LLMService
@@ -90,6 +94,17 @@ def openclaw_status(child_user_id: int = Query(default=2)) -> dict:
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request) -> HTMLResponse:
     return templates.TemplateResponse("index.html", {"request": request})
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon() -> Response:
+    svg = (
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>"
+        "<rect width='64' height='64' rx='14' fill='#0f6d53'/>"
+        "<text x='32' y='42' text-anchor='middle' font-size='34' fill='white' font-family='Arial'>W</text>"
+        "</svg>"
+    )
+    return Response(content=svg, media_type="image/svg+xml")
 
 
 @app.get("/dictionary", response_class=HTMLResponse)
@@ -324,7 +339,7 @@ def chat(req: ChatRequest) -> dict:
 
     message = req.message.strip()
     if not message:
-        return {"ok": True, "reply": "你可以先输入今天任务。"}
+        return {"ok": True, "reply": "You can start with: show me today's plan."}
 
     # Explicit slash commands are executed locally unless user enforces OPENCLAW_ONLY.
     if message.startswith("/") and mode != "OPENCLAW_ONLY":
@@ -383,7 +398,7 @@ def chat(req: ChatRequest) -> dict:
         if mode == "OPENCLAW_ONLY":
             return {
                 "ok": True,
-                "reply": "OpenClaw 当前不可用，请稍后重试，或在家长面板切换到本地模式。",
+                "reply": "OpenClaw is currently unavailable. Please try again later, or switch to Local Only mode in Parent Settings.",
                 "route_source": "openclaw_unavailable",
                 "route_command": precomputed_route.command if precomputed_route else (message if message.startswith("/") else None),
             }
@@ -419,7 +434,7 @@ def _chat_local(
 
     if route.command:
         command_result = handle_chat_message(db=db, user_id=user_id, message=route.command, limits=limits)
-        reply = command_result.get("reply") or "已执行。"
+        reply = command_result.get("reply") or "Done."
         if route.reply and route.reply not in reply:
             reply = f"{route.reply}\n{reply}"
         return {
@@ -508,6 +523,9 @@ def _message_has_learning_action_intent(message: str) -> bool:
         "周报",
         "mistake",
         "常错",
+        "learn these words",
+        "today i want to learn",
+        "today's words",
     )
     return any(token in text for token in keywords)
 
@@ -817,6 +835,37 @@ async def speech_tts(req: TTSRequest) -> dict:
     }
 
 
+@app.post("/api/handwriting/recognize")
+def handwriting_recognize(req: HandwritingRecognizeRequest) -> dict:
+    raw = str(req.image_data_url or "").strip()
+    if not raw.startswith("data:image/") or "," not in raw:
+        raise HTTPException(status_code=400, detail="invalid image_data_url")
+
+    try:
+        b64 = raw.split(",", 1)[1]
+        payload = base64.b64decode(b64, validate=True)
+    except (ValueError, binascii.Error) as exc:
+        raise HTTPException(status_code=400, detail="invalid base64 image payload") from exc
+
+    if not payload:
+        return {"ok": True, "text": "", "candidates": []}
+
+    text = extract_text_from_bytes("handwriting.png", payload, ocr_strength="ACCURATE")
+    candidates: list[str] = []
+    seen: set[str] = set()
+    for token in extract_normalized_tokens(text):
+        lemma = simple_lemma(str(token or "").strip().lower())
+        if not lemma or lemma in seen:
+            continue
+        if not _is_ascii_word(lemma):
+            continue
+        seen.add(lemma)
+        candidates.append(lemma)
+        if len(candidates) >= 5:
+            break
+    return {"ok": True, "text": (candidates[0] if candidates else ""), "candidates": candidates}
+
+
 def _source_type_from_filename(filename: str) -> str:
     suffix = Path(filename).suffix.lower()
     if suffix in {".png", ".jpg", ".jpeg", ".heic", ".bmp", ".webp"}:
@@ -875,3 +924,10 @@ def _normalize_word_status_for_update(raw_status: str) -> str:
     if not normalized:
         raise ValueError("invalid status")
     return normalized
+
+
+def _is_ascii_word(token: str) -> bool:
+    value = str(token or "").strip().lower()
+    if not value:
+        return False
+    return bool(value.isascii() and value.replace("-", "").replace("'", "").isalpha())

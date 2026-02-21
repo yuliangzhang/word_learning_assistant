@@ -88,14 +88,15 @@ def test_museum_card_for_necessary_uses_non_template_meaning(temp_db):
 
     card = generate_card(db=temp_db, user_id=2, word="necessary", card_type="MUSEUM", regenerate=True)
     html = Path(card["html_path"]).read_text(encoding="utf-8")
-    assert "needed in order to do something" in html.lower()
+    assert "necessary" in html.lower()
+    assert "core formula" in html.lower()
     assert "graph TD" in html
     assert "Syntax error in text" not in html
     assert "class=\"bi-zh\"" in html
     assert "class=\"bi-en\"" in html
     assert "graph TD" in html
     assert "topology-source:" in html
-    assert "复习强化" not in html
+    assert "stable mastery" not in html.lower()
 
 
 def test_mermaid_topology_normalizer_keeps_graph_shape():

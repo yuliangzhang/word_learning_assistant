@@ -75,21 +75,15 @@ class LLMService:
 
     def route_message(self, message: str, *, strict_mode: bool = False, llm_enabled: bool = True) -> LLMRoute:
         custom_words = extract_custom_learning_words(message)
+        if custom_words:
+            return LLMRoute(
+                command=f"/learn --words {','.join(custom_words)}",
+                reply=f"Detected {len(custom_words)} requested words. I will add them and build a custom learning flow.",
+                source="heuristic",
+            )
         if not llm_enabled:
-            if custom_words:
-                return LLMRoute(
-                    command=f"/learn --words {','.join(custom_words)}",
-                    reply=f"已识别 {len(custom_words)} 个指定单词，先入词库并生成专属学习链接。",
-                    source="heuristic",
-                )
             return self._heuristic_route(message, strict_mode=strict_mode)
         if not self.available():
-            if custom_words:
-                return LLMRoute(
-                    command=f"/learn --words {','.join(custom_words)}",
-                    reply=f"已识别 {len(custom_words)} 个指定单词，先入词库并生成专属学习链接。",
-                    source="heuristic",
-                )
             return self._heuristic_route(message, strict_mode=strict_mode)
 
         try:
@@ -99,7 +93,7 @@ class LLMService:
                 cmd = f"/learn --words {','.join(custom_words)}"
             reply = str(plan.get("reply") or "").strip()
             if not reply:
-                reply = "我理解了你的需求，马上帮你执行。" if cmd else "我来帮你继续学词。"
+                reply = "Understood. I will execute this now." if cmd else "I can continue your vocabulary workflow."
             return LLMRoute(command=cmd, reply=reply, source="llm")
         except Exception:
             return self._heuristic_route(message, strict_mode=strict_mode)
@@ -109,14 +103,14 @@ class LLMService:
 
     def chat_reply(self, message: str, *, strict_mode: bool = False) -> str:
         if not self.available():
-            return "我可以继续帮你做单词学习任务，比如 /today、/card antenna、/game spelling。"
+            return "I can continue your vocabulary workflow, e.g. /today, /card antenna, /game spelling."
 
         system = (
-            "你是儿童词汇学习助手，输出中文短句，默认 2-4 句。"
-            "不要让孩子执行命令行或暴露密钥。"
+            "You are a child-friendly vocabulary learning assistant. Reply with short, clear English (2-4 sentences). "
+            "Do not ask the child to run shell commands or expose secrets."
         )
         if strict_mode:
-            system += "家长已开启严格模式：减少闲聊，聚焦学习动作。"
+            system += " Parent strict mode is enabled: reduce chitchat and focus on executable learning actions."
 
         payload = {
             "model": self.model,
@@ -128,7 +122,7 @@ class LLMService:
         }
         data = self._chat_completion(payload)
         content = _extract_content(data)
-        return content or "我理解了，我们继续做单词学习任务。"
+        return content or "Understood. Let's continue the learning workflow."
 
     def ocr_from_image_bytes(self, payload: bytes, mime_type: str) -> str:
         if not self.available():
@@ -174,27 +168,28 @@ class LLMService:
         hint_text = "\n".join(hint_lines) if hint_lines else "none"
 
         instruction = (
-            "你是英语词汇深度解构助手。"
-            "请输出一个 JSON，用于生成博物馆级单词卡片。"
-            "字段必须包含："
+            "You are an English vocabulary deep-explanation assistant. "
+            "Return one JSON object for a museum-quality word card. "
+            "Required fields: "
             "phonetic, "
             "origin_scene_zh, origin_scene_en, "
             "core_formula_zh, core_formula_en, "
             "explanation_zh, explanation_en, "
             "etymology_zh, etymology_en, "
             "cognates, nuance_points_zh, nuance_points_en, "
-            "example_sentence, mermaid_code, epiphany。"
-            "要求："
-            "1) 内容必须与输入单词强相关，不得泛化模板化。"
-            "2) 每个字段简洁：origin_scene<=40字，core_formula<=28字，explanation<=120字。"
-            "3) cognates 为 2-4 个字符串；nuance_points_zh/nuance_points_en 各 2-4 条。"
-            "4) mermaid_code 必须是 graph TD 开头的可渲染代码，且节点文字简练。"
-            "5) semantic topology 结构必须体现：[词源/本义] -> [核心动作] -> [抽象含义/现代用法]，可有1-2个分支。"
-            "6) mermaid 仅输出基础节点与箭头，不要 classDef/style/click/subgraph/HTML。"
-            "7) epiphany 为中英双语一句话。"
+            "example_sentence, mermaid_code, epiphany."
+            " Rules: "
+            "1) Content must be strongly tied to the input word; avoid generic templates. "
+            "2) Keep fields concise: origin_scene<=40 chars, core_formula<=28 chars, explanation<=120 chars. "
+            "3) cognates: 2-4 strings; nuance_points_zh/nuance_points_en: 2-4 items each. "
+            "4) mermaid_code must be valid and start with graph TD, with concise node labels. "
+            "5) Semantic topology should express: [etymology/origin] -> [core action] -> [abstract meaning/modern usage], with 1-2 branches if useful. "
+            "6) Mermaid output must use basic nodes/arrows only (no classDef/style/click/subgraph/HTML). "
+            "7) epiphany must be bilingual in one sentence pair (EN first, ZH second). "
+            "8) Prefer English-first phrasing in *_en fields and concise Chinese support in *_zh fields."
         )
         if regenerate:
-            instruction += "8) 这是重生成请求，请使用不同于常见教学模板的新叙事角度。"
+            instruction += " This is a regenerate request: use a fresh narrative angle, not the default teaching template."
         payload = {
             "messages": [
                 {"role": "system", "content": instruction},
@@ -203,7 +198,7 @@ class LLMService:
                     "content": (
                         f"word={word}\n"
                         f"reference_hints:\n{hint_text}\n"
-                        "输出 JSON，不要输出 Markdown。"
+                        "Return JSON only. No Markdown."
                     ),
                 },
             ],
@@ -308,15 +303,15 @@ class LLMService:
 
     def _route_with_model(self, message: str, *, strict_mode: bool) -> dict:
         instruction = (
-            "你是命令规划器，目标是把用户自然语言转换为可执行命令。"
-            "只允许命令: /learn, /learn --words WORD1,WORD2,..., /today, /words, /review, /new N, /mistakes, /card WORD, "
-            "/game spelling|match|daily|dictation|cloze, /report week, /fix WRONG CORRECT。"
-            "如果不需要执行命令，command 输出空字符串。"
-            "输出 JSON，字段: command, reply。"
-            "reply 要自然、简短、中文。"
+            "You are a command planner that converts natural language into executable commands. "
+            "Allowed commands only: /learn, /learn --words WORD1,WORD2,..., /today, /words, /review, /new N, /mistakes, /card WORD, "
+            "/game spelling|match|daily|dictation|cloze, /report week, /fix WRONG CORRECT. "
+            "If no command should run, return an empty command. "
+            "Output strict JSON with fields: command, reply. "
+            "Reply should be short and natural in English."
         )
         if strict_mode:
-            instruction += "严格模式：减少闲聊，优先给训练步骤。"
+            instruction += " Strict mode: minimize chat and prioritize actionable study steps."
 
         payload = {
             "model": self.model,
@@ -378,7 +373,7 @@ class LLMService:
         if custom_words:
             return LLMRoute(
                 command=f"/learn --words {','.join(custom_words)}",
-                reply=f"已识别 {len(custom_words)} 个指定单词，先入词库并生成专属学习链接。",
+                reply=f"Detected {len(custom_words)} requested words. I will add them and build a custom learning flow.",
                 source="heuristic",
             )
 
@@ -390,47 +385,47 @@ class LLMService:
             correct = fix_match.group(2).lower()
             return LLMRoute(
                 command=f"/fix {wrong} {correct}",
-                reply=f"收到，我会把 {wrong} 修正为 {correct}。",
+                reply=f"Got it. I will correct {wrong} to {correct}.",
                 source="heuristic",
             )
 
         if "开始学习" in text or "学习词库" in text or "开始背单词" in text:
-            return LLMRoute(command="/learn", reply="好的，我为你准备一条完整学习链路。", source="heuristic")
+            return LLMRoute(command="/learn", reply="Great. I will prepare the full learning flow.", source="heuristic")
         if "所有单词" in text or "单词库" in text or "词库里" in text:
-            return LLMRoute(command="/words", reply="我先把词库单词列给你。", source="heuristic")
+            return LLMRoute(command="/words", reply="I will list the vocabulary first.", source="heuristic")
         if "今日任务" in text or "今天任务" in text or "today" in lowered:
-            return LLMRoute(command="/today", reply="我先帮你拉取今天任务。", source="heuristic")
+            return LLMRoute(command="/today", reply="I will fetch today's plan first.", source="heuristic")
         if "复习" in text or "review" in lowered:
-            return LLMRoute(command="/review", reply="好的，马上开始复习。", source="heuristic")
+            return LLMRoute(command="/review", reply="Great, starting review now.", source="heuristic")
         if "常错" in text or "mistake" in lowered:
-            return LLMRoute(command="/mistakes", reply="我来列出常错词。", source="heuristic")
+            return LLMRoute(command="/mistakes", reply="I will list top mistake words.", source="heuristic")
         if "周报" in text or "report" in lowered:
-            return LLMRoute(command="/report week", reply="我会生成本周学习报告。", source="heuristic")
+            return LLMRoute(command="/report week", reply="I will generate this week's report.", source="heuristic")
         if "拼写" in text or "spell" in lowered or "spelling" in lowered:
-            return LLMRoute(command="/game spelling", reply="我们开始拼写训练。", source="heuristic")
+            return LLMRoute(command="/game spelling", reply="Let's start spelling practice.", source="heuristic")
         if "图文" in text or "匹配" in text or "match" in lowered:
-            return LLMRoute(command="/game match", reply="开始释义匹配练习。", source="heuristic")
+            return LLMRoute(command="/game match", reply="Starting definition match practice.", source="heuristic")
         if "听写" in text or "dictation" in lowered:
-            return LLMRoute(command="/game dictation", reply="我们开始听写训练。", source="heuristic")
+            return LLMRoute(command="/game dictation", reply="Let's start dictation practice.", source="heuristic")
         if ("博物馆" in text or "museum" in lowered) and ("卡片" in text or "card" in lowered):
             return LLMRoute(
                 command="/learn",
-                reply="我先用今日学习词生成 Museum 卡，并带上配套练习。",
+                reply="I will generate Museum cards from today's words and attach practice links.",
                 source="heuristic",
             )
 
         word_match = re.search(r"\b([A-Za-z][A-Za-z'-]{1,24})\b", text)
         if ("解释" in text or "卡片" in text or "museum" in lowered or "card" in lowered) and word_match:
             word = word_match.group(1).lower()
-            return LLMRoute(command=f"/card {word}", reply=f"我先为 {word} 生成学习卡片。", source="heuristic")
+            return LLMRoute(command=f"/card {word}", reply=f"I will generate a learning card for {word}.", source="heuristic")
 
         reply = (
-            "我可以直接执行学习动作。你可以说："
-            "‘帮我开始学习词库单词’、‘今日学习这些词：appraise,bolster’、"
-            "‘帮我看今天任务’、‘开始拼写练习’或‘把 antena 改成 antenna’。"
+            "I can execute learning actions directly. You can say: "
+            "\"Start learning from vocabulary\", \"Learn these words today: appraise, bolster\", "
+            "\"Show me today's plan\", \"Start spelling practice\", or \"fix antena to antenna\"."
         )
         if strict_mode:
-            reply = "请告诉我你要做哪项训练：今日任务、复习、卡片、练习或周报。"
+            reply = "Choose one task: today's plan, review, card, practice, or weekly report."
         return LLMRoute(command=None, reply=reply, source="heuristic")
 
 

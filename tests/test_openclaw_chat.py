@@ -14,7 +14,7 @@ def test_chat_prefers_openclaw_when_available(client, monkeypatch):
                 "Turn",
                 (),
                 {
-                    "reply": "OpenClaw 已执行今日任务。",
+                    "reply": "OpenClaw executed today's plan.",
                     "links": ["/artifacts/reports/weekly_fake.html"],
                     "meta": {},
                 },
@@ -37,7 +37,7 @@ def test_chat_falls_back_to_local_when_openclaw_is_text_only_for_action(client, 
                 "Turn",
                 (),
                 {
-                    "reply": "抱歉，我无法访问你的任务。",
+                    "reply": "Sorry, I cannot access your task list.",
                     "links": [],
                     "meta": {},
                 },
@@ -49,7 +49,7 @@ def test_chat_falls_back_to_local_when_openclaw_is_text_only_for_action(client, 
     payload = resp.json()
     assert payload["route_source"] in {"heuristic", "llm"}
     assert payload["route_command"] == "/today"
-    assert "今日任务" in payload["reply"]
+    assert "Today's plan" in payload["reply"]
 
 
 def test_chat_falls_back_when_openclaw_unavailable(client, monkeypatch):
@@ -63,7 +63,7 @@ def test_chat_falls_back_when_openclaw_unavailable(client, monkeypatch):
         "route_message",
         lambda message, strict_mode=False, llm_enabled=True: LLMRoute(
             command="/mistakes",
-            reply="我先帮你拉取常错词。",
+            reply="I will fetch your top mistake words.",
             source="heuristic",
         ),
     )
@@ -73,7 +73,7 @@ def test_chat_falls_back_when_openclaw_unavailable(client, monkeypatch):
     payload = resp.json()
     assert payload["route_source"] == "heuristic"
     assert payload["route_command"] == "/mistakes"
-    assert "常错词" in payload["reply"]
+    assert "mistake words" in payload["reply"].lower()
 
 
 def test_openclaw_status_endpoint(client, monkeypatch):

@@ -15,7 +15,7 @@ REQUIRED_MUSEUM_FIELDS = {
 }
 
 MUSEUM_HTML_TEMPLATE = """<!DOCTYPE html>
-<html lang=\"zh-CN\">
+<html lang=\"en\">
 <head>
 <meta charset=\"UTF-8\" />
 <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />
@@ -247,11 +247,11 @@ MUSEUM_HTML_TEMPLATE = """<!DOCTYPE html>
     <h1 class=\"word-title\">{{WORD}}</h1>
     <div class=\"phonetic-wrap\">
       <span class=\"phonetic\">/{{PHONETIC}}/</span>
-      <button id=\"card-pron-btn\" class=\"pron-btn\" type=\"button\">🔊 读音</button>
+      <button id=\"card-pron-btn\" class=\"pron-btn\" type=\"button\">🔊 Pronounce</button>
       <select id=\"card-accent\">
-        <option value=\"en-GB\">英式</option>
-        <option value=\"en-AU\">澳式</option>
-        <option value=\"en-US\">美式</option>
+        <option value=\"en-GB\">UK</option>
+        <option value=\"en-AU\">AU</option>
+        <option value=\"en-US\">US</option>
       </select>
     </div>
   </div>
@@ -345,7 +345,7 @@ MUSEUM_HTML_TEMPLATE = """<!DOCTYPE html>
         const audio = new Audio(payload.audio_url);
         await audio.play();
       } catch (err) {
-        alert('播放读音失败: ' + err.message);
+        alert('Audio playback failed: ' + err.message);
       } finally {
         btn.disabled = false;
       }
@@ -377,11 +377,11 @@ KIDS_HTML_TEMPLATE = """<!DOCTYPE html>
   <div class=\"wrap\">
     <h1>{{WORD}}</h1>
     <div class=\"phonetic\">/{{PHONETIC}}/</div>
-    <div class=\"part\"><b>适龄解释</b><br/>{{CORE_SEMANTICS}}</div>
-    <div class=\"part\"><b>例句</b><ul>{{EXAMPLE_LIST}}</ul></div>
-    <div class=\"part\"><b>记忆法</b><br/>{{ACTION_TODAY}}</div>
+    <div class=\"part\"><b>Kid-friendly Meaning</b><br/>{{CORE_SEMANTICS}}</div>
+    <div class=\"part\"><b>Example Sentences</b><ul>{{EXAMPLE_LIST}}</ul></div>
+    <div class=\"part\"><b>Memory Action</b><br/>{{ACTION_TODAY}}</div>
     <div class=\"next\">
-      <span>加入词库</span><span>开始练习</span><span>听写</span>
+      <span>Add to Vocabulary</span><span>Start Practice</span><span>Dictation</span>
     </div>
   </div>
 </body>
