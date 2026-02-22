@@ -925,8 +925,16 @@ def _build_match_pages(questions: list[dict], *, page_size: int) -> list[dict]:
 
 
 def _compose_definition(word: dict, *, lemma: str, default: str) -> str:
-    zh_list = [str(item).strip() for item in (word.get("meaning_zh") or []) if str(item).strip()]
-    en_list = [str(item).strip() for item in (word.get("meaning_en") or []) if str(item).strip()]
+    zh_list = [
+        str(item).strip()
+        for item in (word.get("meaning_zh") or [])
+        if str(item).strip() and not _is_pending_definition(str(item).strip())
+    ]
+    en_list = [
+        str(item).strip()
+        for item in (word.get("meaning_en") or [])
+        if str(item).strip() and not _is_pending_definition(str(item).strip())
+    ]
     zh = zh_list[0] if zh_list else ""
     en = en_list[0] if en_list else ""
     parts = [part for part in (en, zh) if part]
@@ -934,6 +942,20 @@ def _compose_definition(word: dict, *, lemma: str, default: str) -> str:
     if not combined:
         return default
     return _redact_word(combined, lemma=lemma)
+
+
+def _is_pending_definition(text: str) -> bool:
+    lowered = str(text or "").strip().lower()
+    if not lowered:
+        return True
+    markers = (
+        "definition pending",
+        "definition unavailable",
+        "verify spelling",
+        "词典暂缺",
+        "补充释义",
+    )
+    return any(marker in lowered for marker in markers)
 
 
 def _redact_word(text: str, *, lemma: str) -> str:

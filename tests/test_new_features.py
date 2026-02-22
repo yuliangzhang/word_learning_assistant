@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import word_assistance.lexicon.enricher as enricher_module
 from word_assistance.config import ARTIFACTS_DIR
-from word_assistance.exercises.generator import _compose_definition
+from word_assistance.exercises.generator import _compose_definition, _is_pending_definition
+from word_assistance.lexicon.enricher import _needs_enrichment
 
 
 def _seed_wrong_word(client):
@@ -569,6 +571,57 @@ def test_compose_definition_prefers_english_then_chinese():
         default="fallback",
     )
     assert text == "to assess value / 评估价值"
+
+
+def test_compose_definition_skips_pending_placeholder():
+    text = _compose_definition(
+        {"meaning_en": ["Definition unavailable right now. Verify spelling and regenerate."], "meaning_zh": []},
+        lemma="appraise",
+        default="fallback",
+    )
+    assert text == "fallback"
+    assert _is_pending_definition("definition pending; please verify spelling")
+    assert _is_pending_definition("词典暂缺，请补充释义")
+
+
+def test_public_dictionary_fallback_is_used_when_llm_missing(monkeypatch):
+    monkeypatch.setattr(
+        enricher_module.LLMService,
+        "word_lexicon_profile",
+        lambda *_args, **_kwargs: None,
+    )
+
+    def fake_http_json(url, *, params=None, timeout=4.5):  # noqa: ARG001
+        if "dictionaryapi.dev" in url:
+            return [
+                {
+                    "phonetic": "/kənˈtɛmptʃuəs/",
+                    "meanings": [
+                        {
+                            "definitions": [
+                                {
+                                    "definition": "showing contempt; scornful",
+                                    "example": "His contemptuous tone upset everyone.",
+                                }
+                            ]
+                        }
+                    ],
+                }
+            ]
+        return None
+
+    monkeypatch.setattr(enricher_module, "_http_json", fake_http_json)
+    enricher = enricher_module.WordLexiconEnricher()
+    entry = enricher.lookup("contemptuous")
+    assert entry is not None
+    assert entry["source"] == "dictionaryapi"
+    assert entry["meaning_en"]
+    assert "contempt" in entry["meaning_en"][0].lower()
+    assert entry["examples"]
+
+
+def test_needs_enrichment_allows_english_only_when_complete():
+    assert _needs_enrichment({"meaning_en": ["to finish successfully"], "meaning_zh": [], "examples": ["She accomplished the task."]}) is False
 
 
 def test_favicon_endpoint_is_available(client):

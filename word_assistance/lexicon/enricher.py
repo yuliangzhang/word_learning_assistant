@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import re
+from urllib.parse import quote
 
+import httpx
 from word_assistance.config import PROJECT_ROOT
 from word_assistance.pipeline.corrections import suggest_correction
 from word_assistance.services.llm import LLMService
 from word_assistance.storage.db import Database
 
 SKILL_PROMPT_PATH = PROJECT_ROOT / "skill" / "word-lexicon-enricher" / "prompts" / "lookup.md"
+DICTIONARY_API_BASE = "https://api.dictionaryapi.dev/api/v2/entries/en"
+DATAMUSE_API = "https://api.datamuse.com/words"
 
 KNOWN_CORRECTIONS = {
     "enviroment": "environment",
@@ -114,6 +118,10 @@ class WordLexiconEnricher:
             if normalized:
                 return normalized
 
+        public_entry = _lookup_public_lexicon(token)
+        if public_entry:
+            return public_entry
+
         correction = suggest_correction(token)
         candidate = correction.get("suggested_correction")
         if isinstance(candidate, str) and candidate in BUILTIN_LEXICON and candidate != token:
@@ -210,7 +218,7 @@ def _needs_enrichment(word: dict) -> bool:
     meaning_zh = [str(v).strip() for v in (word.get("meaning_zh") or []) if str(v).strip()]
     meaning_en = [str(v).strip() for v in (word.get("meaning_en") or []) if str(v).strip()]
     examples = [str(v).strip() for v in (word.get("examples") or []) if str(v).strip()]
-    if not meaning_zh or not meaning_en:
+    if not meaning_en:
         return True
     if not examples:
         return True
@@ -234,6 +242,127 @@ def _looks_template_text(text: str) -> bool:
         "语义核心",
     )
     return any(marker in lowered for marker in template_markers)
+
+
+def _lookup_public_lexicon(token: str) -> dict | None:
+    dictionary_entry = _lookup_dictionary_api(token)
+    if dictionary_entry:
+        return {
+            **dictionary_entry,
+            "canonical_lemma": token,
+            "is_valid": True,
+            "source": "dictionaryapi",
+        }
+    datamuse_entry = _lookup_datamuse(token)
+    if datamuse_entry:
+        return {
+            **datamuse_entry,
+            "canonical_lemma": token,
+            "is_valid": True,
+            "source": "datamuse",
+        }
+    return None
+
+
+def _lookup_dictionary_api(token: str) -> dict | None:
+    data = _http_json(f"{DICTIONARY_API_BASE}/{quote(token)}")
+    if not isinstance(data, list):
+        return None
+
+    phonetic = ""
+    meaning_en_raw: list[str] = []
+    examples_raw: list[str] = []
+
+    for entry in data:
+        if not phonetic and isinstance(entry, dict):
+            direct = str(entry.get("phonetic") or "").strip()
+            if direct:
+                phonetic = direct.strip("/")
+            for item in entry.get("phonetics") or []:
+                text = str((item or {}).get("text") or "").strip()
+                if text:
+                    phonetic = text.strip("/")
+                    break
+
+        meanings = entry.get("meanings") if isinstance(entry, dict) else None
+        if not isinstance(meanings, list):
+            continue
+        for meaning in meanings:
+            defs = (meaning or {}).get("definitions")
+            if not isinstance(defs, list):
+                continue
+            for def_item in defs:
+                definition = str((def_item or {}).get("definition") or "").strip()
+                if definition:
+                    meaning_en_raw.append(definition)
+                example = str((def_item or {}).get("example") or "").strip()
+                if example:
+                    examples_raw.append(example)
+
+    meaning_en = _sanitize_list(meaning_en_raw, limit=4)
+    if not meaning_en:
+        return None
+    examples = _sanitize_list(examples_raw, limit=3)
+    if not examples and meaning_en:
+        examples = [f"{token.capitalize()} often means: {meaning_en[0]}."]
+
+    return {
+        "phonetic": phonetic,
+        "meaning_en": meaning_en,
+        "meaning_zh": [],
+        "examples": examples,
+    }
+
+
+def _lookup_datamuse(token: str) -> dict | None:
+    data = _http_json(DATAMUSE_API, params={"sp": token, "md": "dr", "max": 1})
+    if not isinstance(data, list) or not data:
+        return None
+    first = data[0] if isinstance(data[0], dict) else {}
+
+    defs = first.get("defs") if isinstance(first, dict) else None
+    meaning_en_raw: list[str] = []
+    if isinstance(defs, list):
+        for item in defs:
+            text = str(item or "").strip()
+            if "\t" in text:
+                text = text.split("\t", 1)[1].strip()
+            if text:
+                meaning_en_raw.append(text)
+    meaning_en = _sanitize_list(meaning_en_raw, limit=4)
+    if not meaning_en:
+        return None
+
+    phonetic = ""
+    tags = first.get("tags") if isinstance(first, dict) else None
+    if isinstance(tags, list):
+        for tag in tags:
+            value = str(tag or "").strip()
+            if value.startswith("pron:"):
+                phonetic = value.split(":", 1)[1].strip().strip("/")
+                break
+
+    return {
+        "phonetic": phonetic,
+        "meaning_en": meaning_en,
+        "meaning_zh": [],
+        "examples": [f"{token.capitalize()} can be used in context to mean: {meaning_en[0]}."],
+    }
+
+
+def _http_json(url: str, *, params: dict | None = None, timeout: float = 4.5) -> object | None:
+    try:
+        with httpx.Client(timeout=timeout, follow_redirects=True) as client:
+            resp = client.get(
+                url,
+                params=params,
+                headers={"Accept": "application/json", "User-Agent": "word-assistance/1.0"},
+            )
+        if resp.status_code != 200:
+            return None
+        return resp.json()
+    except Exception:
+        return None
 
 
 def _normalize_entry(lemma: str, entry: dict) -> dict:
