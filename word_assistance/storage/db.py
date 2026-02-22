@@ -266,6 +266,51 @@ class Database:
             reviews=int(settings.get("daily_review_limit", 20)),
         )
 
+    def save_chat_message(self, *, user_id: int, role: str, message: str) -> dict | None:
+        text = str(message or "").strip()
+        if not text:
+            return None
+        normalized_role = str(role or "").strip().lower()
+        if normalized_role not in {"user", "assistant"}:
+            raise ValueError("invalid chat role")
+
+        with self.connect() as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO chat_messages (user_id, role, message)
+                VALUES (?, ?, ?)
+                """,
+                (user_id, normalized_role, text),
+            )
+            row = conn.execute(
+                """
+                SELECT id, user_id, role, message, created_at
+                FROM chat_messages
+                WHERE id = ?
+                """,
+                (int(cur.lastrowid),),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def list_chat_messages(self, *, user_id: int, limit: int = 120) -> list[dict]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT id, user_id, role, message, created_at
+                FROM chat_messages
+                WHERE user_id = ?
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (user_id, max(1, min(int(limit), 500))),
+            ).fetchall()
+        return [dict(row) for row in reversed(rows)]
+
+    def clear_chat_messages(self, *, user_id: int) -> int:
+        with self.connect() as conn:
+            cur = conn.execute("DELETE FROM chat_messages WHERE user_id = ?", (user_id,))
+        return int(cur.rowcount or 0)
+
     def create_import(
         self,
         *,

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import word_assistance.app as app_module
 from word_assistance.config import ARTIFACTS_DIR
 from word_assistance.exercises.generator import _compose_definition
 
@@ -311,9 +310,8 @@ def test_daily_spell_page_hides_answer_word_and_uses_audio_trigger(client):
     assert "/api/speech/tts" in html
     assert "/api/review" in html
     assert "renderSpellStep" in html
-    assert "Recognize Handwriting" in html
-    assert "hasInkStrokes" in html
-    assert "Write on the pad first." in html
+    assert "Recognize Handwriting" not in html
+    assert "ink-canvas" not in html
     assert "Try Again" in html
     assert "Next Word" in html
     assert "const revealAnswer = attempts >= 3;" in html
@@ -512,22 +510,56 @@ def test_import_text_respects_auto_accept_threshold(client):
     assert low_item["needs_confirmation"] is False
 
 
-def test_handwriting_recognize_endpoint_returns_candidates(client, monkeypatch):
-    monkeypatch.setattr(
-        app_module,
-        "extract_text_from_bytes",
-        lambda *_args, **_kwargs: "Accommodate, ANTENNA 123",
-    )
-
-    resp = client.post(
-        "/api/handwriting/recognize",
-        json={"image_data_url": "data:image/png;base64,aGVsbG8="},
-    )
+def test_chat_history_persists_and_supports_clear(client):
+    client.put("/api/parent/settings", json={"child_user_id": 2, "orchestration_mode": "LOCAL_ONLY"})
+    resp = client.post("/api/chat", json={"user_id": 2, "message": "/today"})
     assert resp.status_code == 200
-    payload = resp.json()
-    assert payload["ok"] is True
-    assert payload["text"] == "accommodate"
-    assert payload["candidates"][:2] == ["accommodate", "antenna"]
+
+    history = client.get("/api/chat/history", params={"user_id": 2, "limit": 20})
+    assert history.status_code == 200
+    items = history.json()["items"]
+    assert any(item["role"] == "user" and "/today" in item["message"] for item in items)
+    assert any(item["role"] == "assistant" for item in items)
+
+    cleared = client.delete("/api/chat/history", params={"user_id": 2})
+    assert cleared.status_code == 200
+    assert cleared.json()["removed"] >= 2
+
+    after_clear = client.get("/api/chat/history", params={"user_id": 2, "limit": 20})
+    assert after_clear.status_code == 200
+    assert after_clear.json()["items"] == []
+
+
+def test_daily_combo_cache_invalidates_when_meaning_changes(client):
+    import word_assistance.app as app_module
+
+    client.put("/api/parent/settings", json={"child_user_id": 2, "orchestration_mode": "LOCAL_ONLY"})
+
+    preview = client.post(
+        "/api/import/text",
+        json={"user_id": 2, "text": "practice", "source_name": "seed_cache_invalidate"},
+    )
+    item_ids = [x["id"] for x in preview.json()["preview_items"]]
+    client.post("/api/import/commit", json={"import_id": preview.json()["import_id"], "accepted_item_ids": item_ids})
+    word = client.get("/api/words", params={"user_id": 2}).json()["items"][0]
+
+    app_module.db.update_word_learning_fields(
+        word_id=word["id"],
+        meaning_en=["to do something repeatedly in order to improve"],
+        meaning_zh=["反复练习以提升"],
+        examples=["I practice piano every day."],
+    )
+    first = client.post("/api/chat", json={"user_id": 2, "message": "/game match"}).json()["links"][0].split("#")[0]
+
+    app_module.db.update_word_learning_fields(
+        word_id=word["id"],
+        meaning_en=["regular training to build skill and confidence"],
+        meaning_zh=["通过经常训练建立技能与自信"],
+        examples=["Daily practice builds confidence."],
+    )
+    second = client.post("/api/chat", json={"user_id": 2, "message": "/game match"}).json()["links"][0].split("#")[0]
+
+    assert first != second
 
 
 def test_compose_definition_prefers_english_then_chinese():

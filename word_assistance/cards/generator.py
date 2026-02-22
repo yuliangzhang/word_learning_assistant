@@ -944,6 +944,9 @@ def _derive_action_anchor(*, word: str, core_action: str, modern_usage: str, mea
         "词义锚点",
         "请在词库中补充释义",
         "词典暂缺",
+        "definition unavailable",
+        "definition pending",
+        "verify spelling",
         "高频义项是",
     )
     if not any(marker in candidate.lower() for marker in [m.lower() for m in generic_markers]):
@@ -983,7 +986,14 @@ def _derive_action_anchor(*, word: str, core_action: str, modern_usage: str, mea
         return _trim_text(f"{en_match.group(1)}", 20)
 
     fallback_phrase = _extract_phrase(meaning_hint or modern_usage, limit=18)
-    if fallback_phrase and "词典暂缺" not in fallback_phrase and "补充释" not in fallback_phrase and "高频义项是" not in fallback_phrase:
+    if (
+        fallback_phrase
+        and "词典暂缺" not in fallback_phrase
+        and "补充释" not in fallback_phrase
+        and "高频义项是" not in fallback_phrase
+        and "definition unavailable" not in fallback_phrase.lower()
+        and "definition pending" not in fallback_phrase.lower()
+    ):
         return fallback_phrase
     return "提炼关键动作"
 
@@ -1001,10 +1011,10 @@ def _derive_abstract_anchor(
         if usage:
             return usage
     usage = _extract_phrase(meaning_hint or modern_usage, limit=28)
-    if usage and "词典暂缺" not in usage:
+    if usage and "词典暂缺" not in usage and "definition unavailable" not in usage.lower():
         return usage
     usage = _extract_phrase(modern_usage, limit=28)
-    if usage and "词典暂缺" not in usage:
+    if usage and "词典暂缺" not in usage and "definition unavailable" not in usage.lower():
         return usage
     return _trim_text(f"{word} 的抽象语义", 24)
 
@@ -1063,7 +1073,7 @@ def _derive_contrast_anchor(*, word: str, modern_usage: str, meaning_hint: str) 
 
 def _derive_metaphor_anchor(*, word: str, modern_usage: str, meaning_hint: str) -> str:
     phrase = _extract_phrase(meaning_hint or modern_usage, limit=20)
-    if phrase and "词典暂缺" not in phrase:
+    if phrase and "词典暂缺" not in phrase and "definition unavailable" not in phrase.lower():
         return f"隐喻迁移 {phrase}"
     return f"{word.capitalize()} 抽象迁移"
 

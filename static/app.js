@@ -20,6 +20,10 @@ function addMessage(text, type = "bot") {
   log.scrollTop = log.scrollHeight;
 }
 
+function _messageTypeFromRole(role) {
+  return String(role || "").toLowerCase() === "user" ? "user" : "bot";
+}
+
 async function requestJSON(url, options = {}) {
   const headers = { ...(options.headers || {}) };
   if (!(options.body instanceof FormData) && !headers["Content-Type"]) {
@@ -95,6 +99,39 @@ async function sendChat(message) {
     }
   } catch (err) {
     addMessage(`Request failed: ${err.message}`);
+  }
+}
+
+async function loadChatHistory() {
+  const log = document.getElementById("chat-log");
+  if (!log) return;
+  log.innerHTML = "";
+
+  try {
+    const data = await requestJSON(`/api/chat/history?user_id=${USER_ID}&limit=150`);
+    const items = Array.isArray(data.items) ? data.items : [];
+    if (!items.length) {
+      addMessage("Welcome to Word Learning Assistant. Tell me what to do and I will execute it.", "bot");
+      return;
+    }
+    items.forEach((item) => {
+      addMessage(item.message || "", _messageTypeFromRole(item.role));
+    });
+  } catch (err) {
+    addMessage(`Failed to load chat memory: ${err.message}`);
+  }
+}
+
+async function clearChatHistory() {
+  const ok = confirm("Clear all saved chat history?");
+  if (!ok) return;
+  try {
+    await requestJSON(`/api/chat/history?user_id=${USER_ID}`, { method: "DELETE" });
+    const log = document.getElementById("chat-log");
+    if (log) log.innerHTML = "";
+    addMessage("Chat memory cleared.", "bot");
+  } catch (err) {
+    addMessage(`Failed to clear chat memory: ${err.message}`, "bot");
   }
 }
 
@@ -592,6 +629,11 @@ function bindEvents() {
     }
   });
 
+  const clearChatBtn = document.getElementById("chat-clear");
+  if (clearChatBtn) {
+    clearChatBtn.addEventListener("click", clearChatHistory);
+  }
+
   document.getElementById("btn-today").addEventListener("click", () => sendChat("Show me today's plan"));
   document.getElementById("btn-upload").addEventListener("click", () => {
     document.querySelector(".import-panel").scrollIntoView({ behavior: "smooth" });
@@ -662,9 +704,9 @@ function bindEvents() {
 }
 
 bindEvents();
+loadChatHistory();
 loadVoices();
 loadParentSettings();
 refreshWords();
 refreshCorrections();
 loadOpenClawStatus();
-addMessage("Welcome to Word Learning Assistant. Tell me what to do and I will execute it.", "bot");

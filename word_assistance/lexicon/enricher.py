@@ -96,7 +96,7 @@ class WordLexiconEnricher:
                 **entry,
                 "canonical_lemma": mapped,
                 "is_valid": False,
-                "note": f"{token} 疑似拼写错误，建议改为 {mapped}",
+                "note": f"Possible misspelling: {token} -> {mapped}",
                 "source": "builtin-correction",
             }
 
@@ -122,7 +122,7 @@ class WordLexiconEnricher:
                 **entry,
                 "canonical_lemma": candidate,
                 "is_valid": False,
-                "note": f"{token} 疑似拼写错误，建议改为 {candidate}",
+                "note": f"Possible misspelling: {token} -> {candidate}",
                 "source": "heuristic-correction",
             }
         return None
@@ -161,14 +161,16 @@ def ensure_words_enriched(
         if not entry:
             suggestion = suggest_correction(lemma)
             suggested = str(suggestion.get("suggested_correction") or lemma).strip().lower()
-            zh_note = (
-                f"词典暂缺，建议核验拼写：{suggested}" if suggested and suggested != lemma else "词典暂缺，请在词库中补充释义"
+            pending_note = (
+                f"Definition unavailable right now. Verify spelling and regenerate. Suggested spelling: {suggested}."
+                if suggested and suggested != lemma
+                else "Definition unavailable right now. Verify spelling and regenerate."
             )
             db.update_word_learning_fields(
                 word_id=word_id,
-                meaning_zh=[zh_note],
-                meaning_en=["definition pending; please verify spelling and update this entry"],
-                examples=["Please verify this word and add a validated sentence."],
+                meaning_zh=[],
+                meaning_en=[pending_note],
+                examples=[],
             )
             changed_ids.append(word_id)
             continue
@@ -214,6 +216,8 @@ def _needs_enrichment(word: dict) -> bool:
         return True
     if any(_looks_template_text(text) for text in meaning_en[:2]):
         return True
+    if any(_looks_template_text(text) for text in meaning_zh[:2]):
+        return True
     return False
 
 
@@ -222,7 +226,11 @@ def _looks_template_text(text: str) -> bool:
     template_markers = (
         "used in learning",
         "learning, expression",
-        "词源使用教学级",
+        "definition pending",
+        "definition unavailable",
+        "please verify spelling",
+        "词典暂缺",
+        "补充释义",
         "语义核心",
     )
     return any(marker in lowered for marker in template_markers)
@@ -254,7 +262,7 @@ def _normalize_model_entry(original: str, payload: dict) -> dict | None:
     is_valid = bool(payload.get("is_valid", True))
     note = ""
     if not is_valid and canonical != original:
-        note = f"{original} 疑似拼写错误，建议改为 {canonical}"
+        note = f"Possible misspelling: {original} -> {canonical}"
 
     return {
         "canonical_lemma": canonical,

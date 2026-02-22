@@ -97,6 +97,15 @@ CREATE TABLE IF NOT EXISTS exercise_sessions (
   FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS chat_messages (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+  message TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS word_corrections (
   id INTEGER PRIMARY KEY,
   word_id INTEGER NOT NULL,
@@ -144,4 +153,5 @@ CREATE TABLE IF NOT EXISTS parent_settings (
 CREATE INDEX IF NOT EXISTS idx_words_user_status ON words(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_reviews_word_time ON reviews(word_id, review_at);
 CREATE INDEX IF NOT EXISTS idx_imports_user_time ON imports(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_user_time ON chat_messages(user_id, created_at, id);
 CREATE INDEX IF NOT EXISTS idx_word_corrections_word_time ON word_corrections(word_id, corrected_at);

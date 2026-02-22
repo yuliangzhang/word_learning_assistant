@@ -96,7 +96,7 @@ def test_museum_card_for_necessary_uses_non_template_meaning(temp_db):
     assert "class=\"bi-en\"" in html
     assert "graph TD" in html
     assert "topology-source:" in html
-    assert "stable mastery" not in html.lower()
+    assert "definition unavailable" not in html.lower()
 
 
 def test_mermaid_topology_normalizer_keeps_graph_shape():

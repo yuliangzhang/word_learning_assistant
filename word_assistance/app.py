@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import base64
-import binascii
 import csv
 import math
 from contextlib import asynccontextmanager
@@ -19,7 +17,6 @@ from word_assistance.api.schemas import (
     ChatRequest,
     DictionaryAddRequest,
     ExerciseRequest,
-    HandwritingRecognizeRequest,
     ImportCommitRequest,
     ParentSettingsUpdateRequest,
     ReviewRequest,
@@ -42,7 +39,6 @@ from word_assistance.pipeline.importer import (
     build_import_preview_from_file,
     build_import_preview_from_text,
 )
-from word_assistance.pipeline.extraction import extract_normalized_tokens, extract_text_from_bytes, simple_lemma
 from word_assistance.scheduler.srs import next_state, state_from_row
 from word_assistance.services.backup import create_backup_bundle, restore_backup_bundle
 from word_assistance.services.llm import LLMRoute, LLMService
@@ -340,16 +336,20 @@ def chat(req: ChatRequest) -> dict:
     message = req.message.strip()
     if not message:
         return {"ok": True, "reply": "You can start with: show me today's plan."}
+    db.save_chat_message(user_id=req.user_id, role="user", message=message)
 
     # Explicit slash commands are executed locally unless user enforces OPENCLAW_ONLY.
     if message.startswith("/") and mode != "OPENCLAW_ONLY":
-        return _chat_local(
-            message=message,
+        return _store_chat_reply(
             user_id=req.user_id,
-            limits=limits,
-            strict_mode=strict_mode,
-            llm_enabled=llm_enabled,
-            precomputed_route=None,
+            payload=_chat_local(
+                message=message,
+                user_id=req.user_id,
+                limits=limits,
+                strict_mode=strict_mode,
+                llm_enabled=llm_enabled,
+                precomputed_route=None,
+            ),
         )
 
     precomputed_route: LLMRoute | None = None
@@ -377,40 +377,66 @@ def chat(req: ChatRequest) -> dict:
                 or (_message_has_learning_action_intent(message) and not openclaw_turn.links)
             ):
                 fallback_route = action_fallback_route if action_fallback_route and action_fallback_route.command else precomputed_route
-                return _chat_local(
-                    message=message,
+                return _store_chat_reply(
                     user_id=req.user_id,
-                    limits=limits,
-                    strict_mode=strict_mode,
-                    llm_enabled=llm_enabled,
-                    precomputed_route=fallback_route,
+                    payload=_chat_local(
+                        message=message,
+                        user_id=req.user_id,
+                        limits=limits,
+                        strict_mode=strict_mode,
+                        llm_enabled=llm_enabled,
+                        precomputed_route=fallback_route,
+                    ),
                 )
 
             route_command = action_fallback_route.command if action_fallback_route else (message if message.startswith("/") else None)
-            return {
-                "ok": True,
-                "reply": openclaw_turn.reply,
-                "links": openclaw_turn.links,
-                "route_source": "openclaw",
-                "route_command": route_command,
-            }
+            return _store_chat_reply(
+                user_id=req.user_id,
+                payload={
+                    "ok": True,
+                    "reply": openclaw_turn.reply,
+                    "links": openclaw_turn.links,
+                    "route_source": "openclaw",
+                    "route_command": route_command,
+                },
+            )
 
         if mode == "OPENCLAW_ONLY":
-            return {
-                "ok": True,
-                "reply": "OpenClaw is currently unavailable. Please try again later, or switch to Local Only mode in Parent Settings.",
-                "route_source": "openclaw_unavailable",
-                "route_command": precomputed_route.command if precomputed_route else (message if message.startswith("/") else None),
-            }
+            return _store_chat_reply(
+                user_id=req.user_id,
+                payload={
+                    "ok": True,
+                    "reply": "OpenClaw is currently unavailable. Please try again later, or switch to Local Only mode in Parent Settings.",
+                    "route_source": "openclaw_unavailable",
+                    "route_command": precomputed_route.command if precomputed_route else (message if message.startswith("/") else None),
+                },
+            )
 
-    return _chat_local(
-        message=message,
+    return _store_chat_reply(
         user_id=req.user_id,
-        limits=limits,
-        strict_mode=strict_mode,
-        llm_enabled=llm_enabled,
-        precomputed_route=precomputed_route,
+        payload=_chat_local(
+            message=message,
+            user_id=req.user_id,
+            limits=limits,
+            strict_mode=strict_mode,
+            llm_enabled=llm_enabled,
+            precomputed_route=precomputed_route,
+        ),
     )
+
+
+@app.get("/api/chat/history")
+def chat_history(
+    user_id: int = Query(default=2),
+    limit: int = Query(default=120, ge=1, le=500),
+) -> dict:
+    return {"ok": True, "items": db.list_chat_messages(user_id=user_id, limit=limit)}
+
+
+@app.delete("/api/chat/history")
+def clear_chat_history(user_id: int = Query(default=2)) -> dict:
+    removed = db.clear_chat_messages(user_id=user_id)
+    return {"ok": True, "removed": removed}
 
 
 def _chat_local(
@@ -450,6 +476,19 @@ def _chat_local(
         return {"ok": True, "reply": fallback_reply, "route_source": route.source, "route_command": None}
 
     return {"ok": True, "reply": route.reply, "route_source": route.source, "route_command": None}
+
+
+def _store_chat_reply(*, user_id: int, payload: dict) -> dict:
+    reply = str(payload.get("reply") or "").strip()
+    links = payload.get("links")
+    if reply:
+        lines = [reply]
+        if isinstance(links, list):
+            for link in links:
+                if isinstance(link, str) and link.strip():
+                    lines.append(f"Open: {link.strip()}")
+        db.save_chat_message(user_id=user_id, role="assistant", message="\n".join(lines))
+    return payload
 
 
 def _normalize_orchestration_mode(value: object) -> str:
@@ -835,37 +874,6 @@ async def speech_tts(req: TTSRequest) -> dict:
     }
 
 
-@app.post("/api/handwriting/recognize")
-def handwriting_recognize(req: HandwritingRecognizeRequest) -> dict:
-    raw = str(req.image_data_url or "").strip()
-    if not raw.startswith("data:image/") or "," not in raw:
-        raise HTTPException(status_code=400, detail="invalid image_data_url")
-
-    try:
-        b64 = raw.split(",", 1)[1]
-        payload = base64.b64decode(b64, validate=True)
-    except (ValueError, binascii.Error) as exc:
-        raise HTTPException(status_code=400, detail="invalid base64 image payload") from exc
-
-    if not payload:
-        return {"ok": True, "text": "", "candidates": []}
-
-    text = extract_text_from_bytes("handwriting.png", payload, ocr_strength="ACCURATE")
-    candidates: list[str] = []
-    seen: set[str] = set()
-    for token in extract_normalized_tokens(text):
-        lemma = simple_lemma(str(token or "").strip().lower())
-        if not lemma or lemma in seen:
-            continue
-        if not _is_ascii_word(lemma):
-            continue
-        seen.add(lemma)
-        candidates.append(lemma)
-        if len(candidates) >= 5:
-            break
-    return {"ok": True, "text": (candidates[0] if candidates else ""), "candidates": candidates}
-
-
 def _source_type_from_filename(filename: str) -> str:
     suffix = Path(filename).suffix.lower()
     if suffix in {".png", ".jpg", ".jpeg", ".heic", ".bmp", ".webp"}:
@@ -925,9 +933,3 @@ def _normalize_word_status_for_update(raw_status: str) -> str:
         raise ValueError("invalid status")
     return normalized
 
-
-def _is_ascii_word(token: str) -> bool:
-    value = str(token or "").strip().lower()
-    if not value:
-        return False
-    return bool(value.isascii() and value.replace("-", "").replace("'", "").isalpha())

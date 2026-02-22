@@ -87,7 +87,3 @@ class TTSRequest(BaseModel):
     text: str
     accent: str = Field(default="en-GB")
     voice: str | None = None
-
-
-class HandwritingRecognizeRequest(BaseModel):
-    image_data_url: str

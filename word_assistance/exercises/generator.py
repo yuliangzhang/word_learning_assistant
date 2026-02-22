@@ -11,7 +11,7 @@ from word_assistance.config import EXERCISES_DIR
 
 UTC = timezone.utc
 MATCH_PAGE_SIZE = 20
-DAILY_COMBO_SCHEMA_VERSION = "v4"
+DAILY_COMBO_SCHEMA_VERSION = "v5"
 
 
 def build_exercise(
@@ -49,6 +49,9 @@ def build_daily_combo_exercise(
             "id": int(word.get("id", 0)),
             "lemma": str(word.get("lemma", "")).lower(),
             "status": str(word.get("status", "")),
+            "updated_at": str(word.get("updated_at", "")),
+            "meaning_en": tuple(str(v).strip() for v in (word.get("meaning_en") or [])[:2]),
+            "meaning_zh": tuple(str(v).strip() for v in (word.get("meaning_zh") or [])[:2]),
         }
         for word in words
     ]
@@ -255,23 +258,6 @@ def _render_daily_combo_page(*, user_id: int, words: list[dict], spell_questions
     .feedback {{ margin-top: 10px; font-weight: 700; min-height: 24px; }}
     .feedback.good {{ color:#0f766e; }}
     .feedback.bad {{ color:#9f1239; }}
-    .ink-wrap {{
-      margin-top: 10px;
-      border: 1px solid #d3e8dd;
-      border-radius: 10px;
-      padding: 10px;
-      background: #fcfffd;
-    }}
-    .ink-tools {{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px; }}
-    canvas#ink-canvas {{
-      width: 100%;
-      height: 190px;
-      border: 1px dashed #9fbcb0;
-      border-radius: 8px;
-      background: #fff;
-      touch-action: none;
-      cursor: crosshair;
-    }}
     .summary-card {{
       background: #fff;
       border: 1px solid #cde4d9;
@@ -355,7 +341,6 @@ def _render_daily_combo_page(*, user_id: int, words: list[dict], spell_questions
     @media (max-width: 860px) {{
       .match-shell {{ grid-template-columns: 1fr; min-height: auto; }}
       .match-col {{ min-height: auto; }}
-      canvas#ink-canvas {{ height: 220px; }}
     }}
   </style>
 </head>
@@ -379,7 +364,7 @@ def _render_daily_combo_page(*, user_id: int, words: list[dict], spell_questions
         <option value=\"en-AU\">AU (en-AU)</option>
         <option value=\"en-US\">US (en-US)</option>
       </select>
-      <span class=\"hint\">For spelling: tap 🔊 first, then type or handwrite.</span>
+      <span class=\"hint\">For spelling: tap 🔊 first, then type your spelling (tablet handwriting keyboard works too).</span>
     </div>
     <div id=\"list\"></div>
     <div id=\"pager\" class=\"pager hidden\">
@@ -668,110 +653,6 @@ def _render_daily_combo_page(*, user_id: int, words: list[dict], spell_questions
       }}
     }}
 
-    function bindInkCanvas(canvas) {{
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.lineWidth = 6;
-      ctx.strokeStyle = '#0f172a';
-      let drawing = false;
-      let lastX = 0;
-      let lastY = 0;
-
-      const point = (event) => {{
-        const rect = canvas.getBoundingClientRect();
-        return {{
-          x: (event.clientX - rect.left) * (canvas.width / rect.width),
-          y: (event.clientY - rect.top) * (canvas.height / rect.height),
-        }};
-      }};
-
-      const start = (event) => {{
-        const p = point(event);
-        drawing = true;
-        lastX = p.x;
-        lastY = p.y;
-      }};
-      const move = (event) => {{
-        if (!drawing) return;
-        const p = point(event);
-        ctx.beginPath();
-        ctx.moveTo(lastX, lastY);
-        ctx.lineTo(p.x, p.y);
-        ctx.stroke();
-        lastX = p.x;
-        lastY = p.y;
-      }};
-      const end = () => {{
-        drawing = false;
-      }};
-
-      canvas.addEventListener('pointerdown', (event) => {{
-        event.preventDefault();
-        start(event);
-      }});
-      canvas.addEventListener('pointermove', (event) => {{
-        event.preventDefault();
-        move(event);
-      }});
-      canvas.addEventListener('pointerup', end);
-      canvas.addEventListener('pointerleave', end);
-      canvas.addEventListener('pointercancel', end);
-    }}
-
-    function hasInkStrokes(canvas) {{
-      const ctx = canvas && canvas.getContext('2d');
-      if (!ctx) return false;
-      const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-      let darkPixels = 0;
-      for (let i = 0; i < data.length; i += 16) {{
-        const r = data[i];
-        const g = data[i + 1];
-        const b = data[i + 2];
-        const a = data[i + 3];
-        if (a < 16) continue;
-        const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-        if (luminance < 245) {{
-          darkPixels += 1;
-          if (darkPixels >= 60) return true;
-        }}
-      }}
-      return false;
-    }}
-
-    async function recognizeInk(canvas, inputNode, feedbackNode) {{
-      try {{
-        if (!hasInkStrokes(canvas)) {{
-          feedbackNode.className = 'feedback bad';
-          feedbackNode.textContent = 'Write on the pad first.';
-          return;
-        }}
-        feedbackNode.className = 'feedback';
-        feedbackNode.textContent = 'Recognizing handwriting...';
-        const dataUrl = canvas.toDataURL('image/png');
-        const res = await fetch('/api/handwriting/recognize', {{
-          method: 'POST',
-          headers: {{ 'Content-Type': 'application/json' }},
-          body: JSON.stringify({{ image_data_url: dataUrl }}),
-        }});
-        if (!res.ok) {{
-          throw new Error(await res.text());
-        }}
-        const payload = await res.json();
-        if (!payload.text) {{
-          throw new Error('No text recognized');
-        }}
-        inputNode.value = payload.text;
-        feedbackNode.className = 'feedback good';
-        feedbackNode.textContent = `Recognized: ${{payload.text}}`;
-      }} catch (err) {{
-        feedbackNode.className = 'feedback bad';
-        feedbackNode.textContent = `Recognition failed: ${{err.message}}`;
-      }}
-    }}
-
     function renderSpellStep() {{
       const questions = data.spell || [];
       if (!questions.length) {{
@@ -798,15 +679,6 @@ def _render_daily_combo_page(*, user_id: int, words: list[dict], spell_questions
           <div class="clue">${{q.clue || 'Tap 🔊 then spell the word.'}}</div>
           <input id="spell-input" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Type the spelling here" />
 
-          <div class="ink-wrap">
-            <div class="ink-tools">
-              <button type="button" id="ink-recognize" class="secondary">Recognize Handwriting</button>
-              <button type="button" id="ink-clear" class="secondary">Clear Pad</button>
-            </div>
-            <canvas id="ink-canvas" width="1000" height="320"></canvas>
-            <div class="hint small">Use finger/stylus to write. Recognition is best-effort.</div>
-          </div>
-
           <button type="button" id="spell-submit" class="big-submit">Submit</button>
           <div id="spell-feedback" class="feedback"></div>
           <div id="spell-post-actions" class="spell-actions ${{revealAnswer ? '' : 'hidden'}}">
@@ -820,15 +692,8 @@ def _render_daily_combo_page(*, user_id: int, words: list[dict], spell_questions
       const audioBtn = document.getElementById('spell-audio');
       const feedback = document.getElementById('spell-feedback');
       const postActions = document.getElementById('spell-post-actions');
-      const canvas = document.getElementById('ink-canvas');
-      bindInkCanvas(canvas);
 
       audioBtn.addEventListener('click', () => playAudio(audioBtn.dataset.word || '', audioBtn));
-      document.getElementById('ink-clear').addEventListener('click', () => {{
-        const ctx = canvas.getContext('2d');
-        if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
-      }});
-      document.getElementById('ink-recognize').addEventListener('click', () => recognizeInk(canvas, input, feedback));
 
       const goNext = () => {{
         state.spellIndex += 1;
@@ -847,8 +712,6 @@ def _render_daily_combo_page(*, user_id: int, words: list[dict], spell_questions
         feedback.className = 'feedback';
         feedback.textContent = '';
         postActions.classList.add('hidden');
-        const ctx = canvas.getContext('2d');
-        if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
       }});
       document.getElementById('next-word').addEventListener('click', goNext);
 
@@ -857,7 +720,7 @@ def _render_daily_combo_page(*, user_id: int, words: list[dict], spell_questions
         const expected = normalizeSpelling(q.answer);
         if (!user) {{
           feedback.className = 'feedback bad';
-          feedback.textContent = 'Type or recognize a spelling first.';
+          feedback.textContent = 'Type a spelling first.';
           return;
         }}
 
