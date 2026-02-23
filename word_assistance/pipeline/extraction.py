@@ -3,6 +3,10 @@ from __future__ import annotations
 import csv
 import io
 import re
+import shlex
+import shutil
+import subprocess
+import tempfile
 from pathlib import Path
 
 from word_assistance.safety.policies import sanitize_untrusted_text
@@ -70,9 +74,13 @@ IMPORT_DEFINITION_LINKERS = {
 IMPORT_NOISE_WORDS = {
     "north",
     "shore",
+    "coach",
+    "coaching",
+    "college",
     "develop",
     "your",
     "english",
+    "skill",
     "skills",
     "lesson",
     "level",
@@ -186,7 +194,13 @@ def _extract_from_image(payload: bytes, suffix: str, ocr_strength: str = "BALANC
                     if text:
                         ocr_outputs.append(text)
         except Exception:
-            pass
+            if _tesseract_cli_available():
+                for variant in variants:
+                    for config in configs:
+                        text = _ocr_with_tesseract_cli(variant, config=config)
+                        text = text.strip()
+                        if text:
+                            ocr_outputs.append(text)
     except Exception:
         pass
 
@@ -281,6 +295,29 @@ def _suffix_to_mime(suffix: str) -> str:
         ".bmp": "image/bmp",
         ".webp": "image/webp",
     }.get(suffix, "image/png")
+
+
+def _tesseract_cli_available() -> bool:
+    return bool(shutil.which("tesseract"))
+
+
+def _ocr_with_tesseract_cli(image, *, config: str) -> str:
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=True) as tmp:
+        image.save(tmp.name, format="PNG")
+        cmd = ["tesseract", tmp.name, "stdout", "-l", "eng"] + shlex.split(config)
+        try:
+            completed = subprocess.run(
+                cmd,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+        except Exception:
+            return ""
+        if completed.returncode != 0:
+            return ""
+        return str(completed.stdout or "").strip()
 
 
 def extract_candidates(text: str) -> list[str]:

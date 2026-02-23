@@ -125,11 +125,8 @@ class LLMService:
         return content or "Understood. Let's continue the learning workflow."
 
     def ocr_from_image_bytes(self, payload: bytes, mime_type: str) -> str:
-        if not self.available():
+        if not payload:
             return ""
-        if self.provider != "openai":
-            return ""
-
         b64 = base64.b64encode(payload).decode("ascii")
         data_url = f"data:{mime_type};base64,{b64}"
         request = {
@@ -153,7 +150,83 @@ class LLMService:
             data = self._chat_completion(request)
             return _extract_content(data)
         except Exception:
-            return ""
+            if self.base_url.rstrip("/") == "https://api.openai.com/v1":
+                return ""
+            try:
+                data = self._chat_completion_openai(
+                    {**request, "model": "gpt-4o-mini"},
+                    timeout=40,
+                )
+                return _extract_content(data)
+            except Exception:
+                return ""
+
+    def select_import_words_from_image(
+        self,
+        *,
+        payload: bytes,
+        mime_type: str,
+        source_name: str = "",
+        max_words: int = 220,
+    ) -> list[str]:
+        if not payload:
+            return []
+
+        b64 = base64.b64encode(payload).decode("ascii")
+        data_url = f"data:{mime_type};base64,{b64}"
+        instruction = (
+            "Extract the actual vocabulary words students should memorize from the photo. "
+            "Prioritize the left word column of word-definition tables. "
+            "Exclude school names, headers, instructions, page metadata, and full definitions. "
+            "Keep only valid lowercase English words. "
+            "Return strict JSON with one field: words (array)."
+        )
+        request = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": instruction},
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": (
+                                f"source={source_name or 'unknown'}\n"
+                                f"max_words={max_words}\n"
+                                "Extract only target vocabulary words."
+                            ),
+                        },
+                        {"type": "image_url", "image_url": {"url": data_url}},
+                    ],
+                },
+            ],
+            "response_format": {"type": "json_object"},
+            "temperature": 0,
+        }
+        try:
+            data = self._chat_completion(request)
+            content = _extract_content(data)
+            if not content:
+                return []
+            parsed = json.loads(content)
+            raw_words = parsed.get("words") if isinstance(parsed, dict) else None
+            return _sanitize_import_words(raw_words, limit=max_words)
+        except Exception:
+            if self.base_url.rstrip("/") == "https://api.openai.com/v1":
+                return []
+            try:
+                data = self._chat_completion_openai(
+                    {**request, "model": "gpt-4o-mini"},
+                    timeout=40,
+                )
+                content = _extract_content(data)
+                if not content:
+                    return []
+                parsed = json.loads(content)
+                raw_words = parsed.get("words") if isinstance(parsed, dict) else None
+                return _sanitize_import_words(raw_words, limit=max_words)
+            except Exception:
+                return []
 
     def museum_word_payload(self, *, word: str, hints: dict | None = None, regenerate: bool = False) -> dict | None:
         if not self.available():
@@ -359,6 +432,20 @@ class LLMService:
         url = self.base_url.rstrip("/") + "/chat/completions"
         headers = {
             "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        with httpx.Client(timeout=timeout) as client:
+            resp = client.post(url, headers=headers, json=payload)
+            resp.raise_for_status()
+            return resp.json()
+
+    def _chat_completion_openai(self, payload: dict, *, timeout: int = 40) -> dict:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise RuntimeError("missing openai api key")
+        url = "https://api.openai.com/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         }
         with httpx.Client(timeout=timeout) as client:

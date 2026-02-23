@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from word_assistance.pipeline.importer import build_import_preview_from_text
+import word_assistance.pipeline.importer as importer_module
+from word_assistance.pipeline.importer import build_import_preview_from_file, build_import_preview_from_text
 
 
 def test_extract_and_normalize_with_phrasal_and_dedup():
@@ -59,3 +60,37 @@ def test_import_preview_preserves_ous_words_and_lemmatizes_plural_safely():
 
     assert "ingenuous" in lemmas
     assert "exploit" in lemmas
+
+
+def test_smart_import_image_does_not_fallback_to_all_ocr_noise():
+    text = """
+    NORTH SHORE Coaching College
+    Develop Your English Skills
+    Level: 6 Lesson: 4 Page: 0
+    """
+    preview = build_import_preview_from_text(text, source_type="IMAGE", source_name="sheet.jpg")
+    assert preview == []
+
+
+def test_import_preview_file_uses_llm_image_fallback_when_ocr_empty(monkeypatch):
+    monkeypatch.setattr(importer_module, "extract_text_from_bytes", lambda **_kwargs: "")
+    monkeypatch.setattr(
+        importer_module.LLMService,
+        "select_import_words_from_image",
+        lambda *_args, **_kwargs: ["accomplish", "altitude", "north", "concession", "equitation"],
+    )
+
+    extracted, preview = build_import_preview_from_file(
+        filename="wordlist.jpg",
+        payload=b"fake-image-bytes",
+        ocr_strength="BALANCED",
+        auto_accept_threshold=0.85,
+    )
+    lemmas = [item["final_lemma"] for item in preview]
+
+    assert "accomplish" in lemmas
+    assert "altitude" in lemmas
+    assert "concession" in lemmas
+    assert "equitation" in lemmas
+    assert "north" not in lemmas
+    assert extracted
